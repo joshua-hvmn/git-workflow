@@ -7,12 +7,10 @@
 
     s = status -sb
 
-    syncFetch = !git fetch --all --prune
-
     sync = !f() { \
-        git syncFetch; \
-        branch="${1:-next}"; \
-        git switch "$branch" && git pull; \
+        git fetch --all --prune; \
+        branch="${1:-$(git branch --show-current)}"; \
+        git switch "$branch" && git pull --rebase; \
     }; f
 
     c = !f() { \
@@ -35,7 +33,7 @@
             echo "No message provided. Aborted."; return 1; \
         fi; \
         current="$(git branch --show-current)"; \
-        git add -u && git c "$message"; \
+        git add -u && git commit -m "$message"; \
         git push -u origin "$current"; \
     }; f
 
@@ -43,17 +41,17 @@
         choice="${1:-$(git branch --show-current)}"; \
         force="${2:-}"; \
         switched=0; \
-        if [[ -z "$choice" ]] || [ "$choice" = "main" ] || [ "$choice" = "next" ]; then \
+        if [ -z "$choice" ] || [ "$choice" = "main" ] || [ "$choice" = "next" ]; then \
             echo "Error: no branch specified, or protected branch $choice"; \
             return 1; \
         fi; \
         current=$(git branch --show-current); \
-        if [[ "$choice" == "$current" ]]; then \
+        if [ "$choice" == "$current" ]; then \
             git switch next || { echo "Failed to switch to next (does it exist?)"; return 1; }; \
             echo "Switched to 'next' to allow deletion of '$choice'"; \
             switched=1; \
         fi; \
-        if [[ "$force" =~ ^(yes|-y|--yes|--y|y|d|-d|--d|--delete)$ ]]; then \
+        if [ "$force" =~ ^(yes|-y|--yes|--y|y|d|-d|--d|--delete)$ ]; then \
             confirm="y"; \
         else \
             read -p "Delete '$choice' locally and remotely? [y/N] " confirm; \
@@ -75,6 +73,32 @@
         esac; \
     }; f
 
+    conflicts-rm !f() { \
+        branch="${1:-$(git branch --show-current)}"; \
+        if [ "$branch" == "main" ] || [ "$branch" == "next" ]; then \
+            echo "ERROR: You cannot 'remerge' the $branch branch. Remerging merges from next to the explicitly defined or current branch."; return 1; \
+        fi; \
+        git fetch --all --prune; \
+        if [ "branch" == release/* ]; then \
+            git merge main; \
+        else \
+            git merge next; \
+        fi; \
+    }; f
+
+    conficts-rb !f() { \
+        branch="${1:-$(git branch --show-current)}"; \
+        if [ "$branch" == "main" ] || [ "$branch" == "next" ]; then \
+            echo "ERROR: You cannot 'rebase' the $branch branch. Rebasing merges from next to the explicitly defined or current branch."; return 1; \
+        fi; \
+        git fetch --all --prune; \
+        if [ "branch" == release/* ]; then \
+            git rebase main; \
+        else \
+            git rebase next; \
+        fi; \
+    }; f
+
     finish = !f() { \
         currentBranch=$(git branch --show-current); \
         if [[ "$currentBranch" == "main" ]] || [[ "$currentBranch" == "next" ]]; then \
@@ -82,18 +106,17 @@
         fi; \
         read -p "Finish '$currentBranch'? This will merge and delete the branch. [y/N] " confirm; \
         [[ "$confirm" =~ ^[yY] ]] || { echo "Aborted."; return 1; }; \
-        git sync next && git sync main; \
         if [[ "$currentBranch" == release/* ]]; then \
             versionTag="${currentBranch#release/}"; \
             git switch main && git merge --no-ff "$currentBranch" && \
             git tag -a "$versionTag" -m "Release $versionTag" && \
             git switch next && git merge --no-ff "$currentBranch" && \
             git push origin main next --tags && \
-            git deleteBranch "$currentBranch" yes; \
+            echo "git deleteBranch "$currentBranch" yes"; \
         else \
             git switch next && git merge --no-ff "$currentBranch" && \
             git push origin next && \
-            git deleteBranch "$currentBranch" yes; \
+            echo "git deleteBranch "$currentBranch" yes"; \
         fi; \
     }; f
 
