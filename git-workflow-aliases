@@ -73,56 +73,34 @@
         esac; \
     }; f
 
-    conflicts-rm !f() { \
-        branch="${1:-$(git branch --show-current)}"; \
-        if [ "$branch" == "main" ] || [ "$branch" == "next" ]; then \
-            echo "ERROR: You cannot 'remerge' the $branch branch. Remerging merges from next to the explicitly defined or current branch."; return 1; \
-        fi; \
-        git fetch --all --prune; \
-        if [ "branch" == release/* ]; then \
-            git merge main; \
-        else \
-            git merge next; \
-        fi; \
-    }; f
-
-    conficts-rb !f() { \
-        branch="${1:-$(git branch --show-current)}"; \
-        if [ "$branch" == "main" ] || [ "$branch" == "next" ]; then \
-            echo "ERROR: You cannot 'rebase' the $branch branch. Rebasing merges from next to the explicitly defined or current branch."; return 1; \
-        fi; \
-        git fetch --all --prune; \
-        if [ "branch" == release/* ]; then \
-            git rebase main; \
-        else \
-            git rebase next; \
-        fi; \
-    }; f
-
     finish = !f() { \
         currentBranch=$(git branch --show-current); \
-        if [[ "$currentBranch" == "main" ]] || [[ "$currentBranch" == "next" ]]; then \
+        if [ "$currentBranch" == "main" ] || [ "$currentBranch" == "next" ]; then \
             echo "ERROR: You cannot 'finish' the $currentBranch branch."; return 1; \
         fi; \
-        read -p "Finish '$currentBranch'? This will merge and delete the branch. [y/N] " confirm; \
-        [[ "$confirm" =~ ^[yY] ]] || { echo "Aborted."; return 1; }; \
-        if [[ "$currentBranch" == release/* ]]; then \
+        if [ "$currentBranch" == release/* ]; then \
+            echo "Fix conflicts by rebasing or remerging first."; \
+            read -p "Merge commit '$currentBranch' into 'main', 'next', and push changes and tag? [y/N] " confirm; \
+            [ "$confirm" =~ ^[yY] ] || { echo "Aborted."; return 1; }; \
             versionTag="${currentBranch#release/}"; \
             git switch main && git merge --no-ff "$currentBranch" && \
             git tag -a "$versionTag" -m "Release $versionTag" && \
             git switch next && git merge --no-ff "$currentBranch" && \
             git push origin main next --tags && \
-            echo "git deleteBranch "$currentBranch" yes"; \
+            echo "RUN: git deleteBranch "$currentBranch" yes"; \
         else \
+            echo "Fix conflicts by rebasing or remerging first."; \
+            read -p "Merge commit '$currentBranch' into 'next' and push? [y/N] " confirm; \
+            [ "$confirm" =~ ^[yY] ] || { echo "Aborted."; return 1; }; \
             git switch next && git merge --no-ff "$currentBranch" && \
             git push origin next && \
-            echo "git deleteBranch "$currentBranch" yes"; \
+            echo "RUN: git deleteBranch "$currentBranch" yes"; \
         fi; \
     }; f
 
     start = !f() { \
         mode="$1"; \
-        if [[ -z "$mode" ]]; then \
+        if [ -z "$mode" ]; then \
             echo "ERROR: usage: git start topic <branch-name>    Start a topic branch"; \
             echo "       usage: git start -r <version-tag>       Start a release"; \
             return 1; \
@@ -130,24 +108,26 @@
         case "$mode" in \
             topic|t|-t|--topic) \
                 branchName="$2"; \
-                if [[ -z "$branchName" ]]; then \
+                if [ -z "$branchName" ]; then \
                     read -r -p "Enter new topic branch name: " branchName; \
                 fi; \
-                if [[ -z "$branchName" ]]; then \
+                if [ -z "$branchName" ]; then \
                     echo "No branch name provided. Exiting."; return 1; \
                 fi; \
-                git sync next; \
+                git fetch --all --prune; \
+                git switch next && git pull --rebase; \
                 git switch -c "$branchName" next; \
                 ;; \
             release|r|-r|--release) \
                 version="$2"; \
-                if [[ -z "$version" ]]; then \
+                if [ -z "$version" ]; then \
                     read -r -p "Enter version tag (e.g. v1.2.3): " version; \
                 fi; \
-                if [[ -z "$version" ]]; then \
+                if [ -z "$version" ]; then \
                     echo "No version provided. Aborted."; return 1; \
                 fi; \
-                git sync next; \
+                git fetch --all --prune; \
+                git switch next && git pull --rebase; \
                 git switch -c "release/$version" next; \
                 ;; \
             *) \
