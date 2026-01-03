@@ -63,7 +63,7 @@
         case \"$confirm\" in \
             [yY][eE][sS]|[yY]) \
                 git branch -d \"$choice\" && \
-                git push origin --delete \"$choice\" || echo \"Remote delete failed (maybe already gone)\"; \
+                git push origin --delete '$choice' || echo \"Remote delete failed (maybe already gone)\"; \
                 echo \"Branch '$choice' deleted locally and remotely.\"; \
                 ;; \
             *) \
@@ -142,6 +142,7 @@
                 git fetch --all --prune; \
                 git switch next && git pull --rebase; \
                 git switch -c \"$branchName\" next; \
+                git push -u origin '$branchName'; \
                 ;; \
             release|r|-r|--release) \
                 version=\"$2\"; \
@@ -154,6 +155,7 @@
                 git fetch --all --prune; \
                 git switch next && git pull --rebase; \
                 git switch -c \"release/$version\" next; \
+                git push -u origin 'release/$version'; \
                 ;; \
             *) \
                 echo \"ERROR: unknown mode: $mode\"; return 1; \
