@@ -23,7 +23,7 @@
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
         git commit -m \"$message\"; \
-    }; f"
+    }; f";
 
     qc = "!f() { \
         message=\"$1\"; \
@@ -47,16 +47,19 @@
             return 1; \
         fi; \
         current=$(git branch --show-current); \
-        if [ \"$choice\" == \"$current\" ]; then \
+        if [ \"$choice\" = \"$current\" ]; then \
             git switch next || { echo \"Failed to switch to next (does it exist?)\"; return 1; }; \
             echo \"Switched to 'next' to allow deletion of '$choice'\"; \
             switched=1; \
         fi; \
-        if [ \"$force\" =~ ^(yes|-y|--yes|--y|y|d|-d|--d|--delete)$ ]; then \
-            confirm=\"y\"; \
-        else \
-            read -p \"Delete '$choice' locally and remotely? [y/N] \" confirm; \
-        fi; \
+        case \"$force\" in \
+            yes|-y|--yes|--y|y|d|-d|--d|--delete) \
+                confirm=\"y\"; \
+                ;; \
+            *) \
+                read -p \"Delete '$choice' locally and remotely? [y/N] \" confirm; \
+                ;; \
+        esac; \
         case \"$confirm\" in \
             [yY][eE][sS]|[yY]) \
                 git branch -d \"$choice\" && \
@@ -74,32 +77,53 @@
         esac; \
     }; f"
 
+
     finish = "!f() { \
         currentBranch=$(git branch --show-current); \
-        if [ \"$currentBranch\" == \"main\" ] || [ \"$currentBranch\" == \"next\" ]; then \
+        if [ \"$currentBranch\" = \"main\" ] || [ \"$currentBranch\" = \"next\" ]; then \
             echo \"ERROR: You cannot 'finish' the $currentBranch branch.\"; return 1; \
         fi; \
-        if [ \"$currentBranch\" == release/* ]; then \
-            echo \"Fix conflicts by rebasing or remerging first.\"; \
-            read -p \"Merge commit '$currentBranch' into 'main', 'next', and push changes and tag? [y/N] \" confirm; \
-            [ \"$confirm\" =~ ^[yY] ] || { echo \"Aborted.\"; return 1; }; \
-            versionTag=\"${currentBranch#release/}\"; \
-            git switch main && git merge --no-ff \"$currentBranch\" && \
-            git tag -a \"$versionTag\" -m \"Release $versionTag\" && \
-            git switch next && git merge --no-ff \"$currentBranch\" && \
-            git push origin main next --tags && \
-            echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
-        else \
-            echo \"Fix conflicts by rebasing or remerging first.\"; \
-            read -p \"Merge commit '$currentBranch' into 'next' and push? [y/N] \" confirm; \
-            [ \"$confirm\" =~ ^[yY] ] || { echo \"Aborted.\"; return 1; }; \
-            git switch next && git merge --no-ff \"$currentBranch\" && \
-            git push origin next && \
-            echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
-        fi; \
+        case \"$currentBranch\" in \
+            release/*) \
+                echo \"Fix conflicts by rebasing or remerging first.\"; \
+                read -p \"Merge commit '$currentBranch' into 'main', 'next', and push changes and tag? [y/N] \" confirm; \
+                case \"$confirm\" in \
+                    [yY][eE][sS]|[yY]) \
+                        : \
+                        ;; \
+                    *) \
+                        echo \"Aborted.\"; \
+                        return 1; \
+                        ;; \
+                esac; \
+                versionTag=\"${currentBranch#release/}\"; \
+                git switch main && git merge --no-ff \"$currentBranch\" && \
+                git tag -a \"$versionTag\" -m \"Release $versionTag\" && \
+                git switch next && git merge --no-ff \"$currentBranch\" && \
+                git push origin main next --tags && \
+                echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
+                ;; \
+            *) \
+                echo \"Fix conflicts by rebasing or remerging first.\"; \
+                read -p \"Merge commit '$currentBranch' into 'next' and push? [y/N] \" confirm; \
+                case \"$confirm\" in \
+                    [yY][eE][sS]|[yY]) \
+                        : \
+                        ;; \
+                    *) \
+                        echo \"Aborted.\"; \
+                        return 1; \
+                        ;; \
+                esac; \
+                git switch next && git merge --no-ff \"$currentBranch\" && \
+                git push origin next && \
+                echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
+                ;; \
+        esac; \
     }; f"
 
     start = "!f() { \
+        git rev-parse --verify next || { echo \"Could not find 'next' branch.\"; return 1; }; \
         mode=\"$1\"; \
         if [ -z \"$mode\" ]; then \
             echo \"ERROR: usage: git start topic <branch-name>    Start a topic branch\"; \
