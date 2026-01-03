@@ -15,7 +15,7 @@
 }; f"
 
     c = "!f() { \
-        message="\$1\"; \
+        message=\"$1\"; \
         if [ -z \"$message\" ]; then \
             read -p \"Enter a commit message: \" message; \
         fi; \
