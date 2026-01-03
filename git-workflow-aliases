@@ -44,7 +44,7 @@
         force="${2:-}"; \
         switched=0; \
         if [[ -z "$choice" ]] || [ "$choice" = "main" ] || [ "$choice" = "next" ]; then \
-            echo "Error: no branch specified, or protected branch $choice"
+            echo "Error: no branch specified, or protected branch $choice"; \
             return 1; \
         fi; \
         current=$(git branch --show-current); \
