@@ -1,23 +1,20 @@
 [alias]
-    # Wrappers and Simple Stuff:
-    ## Graph with branches:
     lg = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)' --all
+
     graph = log --graph --oneline --all --decorate --color
+
     aa = add -u
+
     s = status -sb
+
     syncFetch = !git fetch --all --prune
-    \
-    ### Update a branch
-    #  - Pass the name of the branch to update from remote
+
     sync = !f() { \
         git syncFetch; \
         branch="${1:-next}"; \
-        git switch $branch && git pull; \
+        git switch "$branch" && git pull; \
     }; f
-    \
-    # Smart Commit
-    #  - git c to enter a message
-    #  - git c "message"
+
     c = !f() { \
         message="$1"; \
         if [[ -z "$message" ]]; then \
@@ -28,9 +25,7 @@
         fi; \
         git commit -m "$message"; \
     }; f
-    ## Quick Commit
-    #  - add message after
-    #  > git qc "Testing"
+
     qc = !f() { \
         message="$1"; \
         if [[ -z "$message" ]]; then \
@@ -43,16 +38,11 @@
         git add -u && git c "$message"; \
         git push -u origin "$current"; \
     }; f
-    \
-    # COMPLEX STUFF:
-    ## DELETE ANY BRANCH (except main or next)
-    #  - pass the branch name to delete local and remote
-    #  - requires confirmation
-    #  - 'yes|-y|--yes|--y|y|d|-d|--d|--delete' after branch name to skip confirmation
+
     deleteBranch = !f() { \
         choice="${1:-$(git branch --show-current)}"; \
         force="${2:-}"; \
-        switched=0
+        switched=0; \
         if [[ -z "$choice" ]] || [ "$choice" = "main" ] || [ "$choice" = "next" ]; then \
             echo "Error: no branch specified, or protected branch $choice"
             return 1; \
@@ -61,7 +51,7 @@
         if [[ "$choice" == "$current" ]]; then \
             git switch next || { echo "Failed to switch to next (does it exist?)"; return 1; }; \
             echo "Switched to 'next' to allow deletion of '$choice'"; \
-            switched=1
+            switched=1; \
         fi; \
         if [[ "$force" =~ ^(yes|-y|--yes|--y|y|d|-d|--d|--delete)$ ]]; then \
             confirm="y"; \
@@ -84,20 +74,16 @@
                 ;; \
         esac; \
     }; f
-    # Finish (merge to main and next if release else merge to next)
-    # - no variables, run from the branch you want to integrate and delete.
+
     finish = !f() { \
         currentBranch=$(git branch --show-current); \
-        # 1. Protect core branches \
         if [[ "$currentBranch" == "main" ]] || [[ "$currentBranch" == "next" ]]; then \
             echo "ERROR: You cannot 'finish' the $currentBranch branch."; return 1; \
         fi; \
         read -p "Finish '$currentBranch'? This will merge and delete the branch. [y/N] " confirm; \
-        [[ "$confirm" =~ ^[yY] ]] || { echo "Aborted."; return 1; }
+        [[ "$confirm" =~ ^[yY] ]] || { echo "Aborted."; return 1; }; \
         git sync next && git sync main; \
-        # Mode detection \
         if [[ "$currentBranch" == release/* ]]; then \
-            # Release mode \
             versionTag="${currentBranch#release/}"; \
             git switch main && git merge --no-ff "$currentBranch" && \
             git tag -a "$versionTag" -m "Release $versionTag" && \
@@ -105,20 +91,17 @@
             git push origin main next --tags && \
             git deleteBranch "$currentBranch" yes; \
         else \
-            # Topic mode \
             git switch next && git merge --no-ff "$currentBranch" && \
             git push origin next && \
             git deleteBranch "$currentBranch" yes; \
         fi; \
     }; f
-    # Start
-    # - pass topic or release
-    # - then pass name or version number (include v)
+
     start = !f() { \
         mode="$1"; \
         if [[ -z "$mode" ]]; then \
-            echo "ERROR: usage: git start topic <branch-name>   # Start a topic branch"; \
-            echo "       usage: git start -r <version-tag>      # Start a release"; \
+            echo "ERROR: usage: git start topic <branch-name>    Start a topic branch"; \
+            echo "       usage: git start -r <version-tag>       Start a release"; \
             return 1; \
         fi; \
         case "$mode" in \
