@@ -99,7 +99,7 @@
                 versionTag=\"${currentBranch#release/}\"; \
                 git switch main && git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"Release $versionTag\" && \
-                git switch next && git merge --no-ff \"$currentBranch\" && \
+                git switch next && git merge --no-ff \"main\" && \
                 git push origin main next --tags && \
                 echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
                 ;; \
