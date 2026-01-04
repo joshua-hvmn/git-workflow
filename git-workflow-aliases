@@ -7,6 +7,11 @@
 
     s = status -sb
 
+    forceUp = "!f() { \
+        current=\"${1:-$(git branch --show-current)}\"; \
+        push --force-with-lease origin \"$current\"; \
+    }; f"
+    
     sync = "!f() { \
         git fetch --all --prune; \
         current=\"${1:-$(git branch --show-current)}\"; \
@@ -107,9 +112,12 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && git pull --rebase && git merge --no-ff \"$currentBranch\" && \
+                git switch main && \
+                git pull --rebase && \
+                git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
-                git switch next && git merge --ff-only main && \
+                git switch next && \
+                git merge --ff-only main && \
                 git push origin main next --tags && \
                 echo \"RUN: git deleteBranch $currentBranch yes\"; \
                 ;; \
@@ -117,9 +125,10 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into next, and push changes? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch next && git merge --no-ff \"$currentBranch\" && \
+                git switch next && \
+                git merge --no-ff \"$currentBranch\" && \
                 git push origin next && \
-                echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
+                echo \"RUN: git deleteBranch $currentBranch yes\"; \
                 ;; \
         esac; \
     }; f"
@@ -146,7 +155,8 @@
                     echo \"No branch name provided. Exiting.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch next && git pull --rebase --autostash; \
+                git switch next && \
+                git pull --rebase --autostash; \
                 git switch -c \"$branchName\" next; \
                 git push -u origin \"$branchName\"; \
                 ;; \
@@ -159,7 +169,8 @@
                     echo \"No name provided. Aborted.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch main && git pull --rebase --autostash; \
+                git switch main && \
+                git pull --rebase --autostash; \
                 git switch -c \"hotfix/$fixName\" main; \
                 git push -u origin \"hotfix/$fixName\"; \
                 ;; \
@@ -172,7 +183,8 @@
                     echo \"No version provided. Aborted.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch next && git pull --rebase --autostash; \
+                git switch next && \
+                git pull --rebase --autostash; \
                 git switch -c \"release/$version\" next; \
                 git push -u origin \"release/$version\"; \
                 ;; \
