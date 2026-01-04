@@ -55,16 +55,22 @@
                     ;; \
             esac; \
         fi; \
-        push --force-with-lease origin \"$choice\"; \
+        git push --force-with-lease origin \"$choice\"; \
     }; f"
     
-    sync = "!f() { \
-        git fetch --all --prune; \
+    fprune = fetch --all --prune
+
+    rbpull = "!f() { \
         current=\"${1:-$(git branch --show-current)}\"; \
         git switch \"$current\"; \
         git stash -u; \
         git pull --rebase origin \"$current\"; \
         git stash pop; \
+    }; f"
+
+    sync = "!f() { \
+        git fprune; \
+        git rbpull; \
     }; f"
 
     c = "!f() { \
@@ -102,9 +108,7 @@
         if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
             echo \"Branch exists on remote. Syncing...\"; \
             git fetch origin \"$current\"; \
-            git stash -u; \
-            git pull --rebase origin \"$current\"; \
-            git stash pop; \
+            git rbpull \"$current\"; \
         else \
             echo \"Branch does not exist on remote yet. Skipping pull.\"; \
         fi; \
@@ -163,6 +167,7 @@
 
 
     finish = "!f() { \
+        git fprune; \
         currentBranch=$(git branch --show-current); \
         if [ \"$currentBranch\" = \"main\" ] || [ \"$currentBranch\" = \"next\" ]; then \
             echo \"ERROR: You cannot 'finish' the $currentBranch branch.\"; return 1; \
@@ -178,8 +183,7 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && \
-                git pull --rebase && \
+                git rbpull main; \
                 git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
                 git switch next && \
@@ -200,6 +204,7 @@
     }; f"
 
     start = "!f() { \
+        git fprune; \
         git rev-parse --verify next || { echo \"Could not find 'next' branch.\"; return 1; }; \
         mode=\"$1\"; \
         if [ -z \"$mode\" ]; then \
@@ -220,9 +225,7 @@
                 if [ -z \"$branchName\" ]; then \
                     echo \"No branch name provided. Exiting.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch next && \
-                git pull --rebase --autostash; \
+                git rbpull next; \
                 git switch -c \"$branchName\" next; \
                 git push -u origin \"$branchName\"; \
                 ;; \
@@ -234,9 +237,7 @@
                 if [ -z \"$fixName\" ]; then \
                     echo \"No name provided. Aborted.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch main && \
-                git pull --rebase --autostash; \
+                git rbpull main; \
                 git switch -c \"hotfix/$fixName\" main; \
                 git push -u origin \"hotfix/$fixName\"; \
                 ;; \
@@ -248,9 +249,7 @@
                 if [ -z \"$version\" ]; then \
                     echo \"No version provided. Aborted.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch next && \
-                git pull --rebase --autostash; \
+                git rbpull next; \
                 git switch -c \"release/$version\" next; \
                 git push -u origin \"release/$version\"; \
                 ;; \
