@@ -107,9 +107,9 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && git pull --rebase --autostash && git merge --no-ff \"$currentBranch\" && \
+                git switch main && git pull --rebase && git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
-                git switch next && git merge main && \
+                git switch next && git merge --ff-only main && \
                 git push origin main next --tags && \
                 echo \"RUN: git deleteBranch $currentBranch yes\"; \
                 ;; \
