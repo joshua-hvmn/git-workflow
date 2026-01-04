@@ -15,7 +15,7 @@
 
     sq = "!f() { name=\"${1:-next}\" && git rebase -i \"$name\"; }; f"
 
-    ps = "!f() {
+    ps = "!f() { \
         current=\"$(git branch --show-current)\"; \
         if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
             read -r -p \"On $current. Are you sure you want to push? [y/N] : \" confirm; \
@@ -113,35 +113,7 @@
 
     qcp = "!f() { \
         message=\"$1\"; \
-        current=\"$(git branch --show-current)\"; \
-        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
-            read -r -p \"On $current. Are you sure you want to commit? [y/N] : \" confirm; \
-            case \"$confirm\" in \
-                [yY][eE][sS]|[yY]) \
-                    : \
-                    ;; \
-                *) \
-                    echo \"Aborted.\"; \
-                    return 1; \
-                    ;; \
-            esac; \
-        fi; \
-        if [ -z \"$message\" ]; then \
-            read -r -p \"Enter a commit message: \" message; \
-        fi; \
-        if [ -z \"$message\" ]; then \
-            echo \"No message provided. Aborted.\"; return 1; \
-        fi; \
-        if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
-            echo \"Branch exists on remote. Syncing...\"; \
-            git fetch origin \"$current\"; \
-            git stash -u; \
-            git pull --rebase origin \"$current\"; \
-            git stash pop; \
-        else \
-            echo \"Branch does not exist on remote yet. Skipping pull.\"; \
-        fi; \
-        git add -u && git commit -m \"$message\"; \
+        git qc \"$message\"; \
         git push -u origin \"$current\"; \
     }; f"
 
