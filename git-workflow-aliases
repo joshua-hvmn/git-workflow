@@ -17,7 +17,7 @@
     c = "!f() { \
         message=\"$1\"; \
         if [ -z \"$message\" ]; then \
-            read -p \"Enter a commit message: \" message; \
+            read -r -p \"Enter a commit message: \" message; \
         fi; \
         if [ -z \"$message\" ]; then \
             echo \"No message provided. Aborted.\"; return 1; \
@@ -28,12 +28,14 @@
     qc = "!f() { \
         message=\"$1\"; \
         if [ -z \"$message\" ]; then \
-            read -p \"Enter a commit message: \" message; \
+            read -r -p \"Enter a commit message: \" message; \
         fi; \
         if [ -z \"$message\" ]; then \
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
         current=\"$(git branch --show-current)\"; \
+        git fetch $current; \
+        git pull --rebase; \
         git add -u && git commit -m \"$message\"; \
         git push -u origin \"$current\"; \
     }; f"
@@ -90,7 +92,7 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && git merge --no-ff \"$currentBranch\" && \
+                git switch main && git pull --rebase && git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
                 git switch next && git merge --no-ff \"main\" && \
                 git push origin main next --tags && \
