@@ -11,10 +11,6 @@
         git fetch --all --prune; \
         current=\"${1:-$(git branch --show-current)}\"; \
         git switch \"$current\"; \
-        if [ -n "$(git ls-files --others --exclude-standard)" ]; then \
-            echo "ERROR: You have untracked files. Please add or delete them."; \
-            return 1; \
-        fi; \
         git stash -u; \
         git pull --rebase origin \"$current\"; \
         git stash pop; \
@@ -59,6 +55,10 @@
             echo \"Error: no branch specified, or protected branch $choice\"; \
             return 1; \
         fi; \
+        if [ -n \"$(git ls-files --others --exclude-standard)\" ]; then \
+            echo \"ERROR: You have untracked files. Please add or delete them.\"; \
+            return 1; \
+        fi; \
         current=$(git branch --show-current); \
         if [ \"$choice\" = \"$current\" ]; then \
             git switch next || { echo \"Failed to switch to next (does it exist?)\"; return 1; }; \
@@ -96,6 +96,10 @@
         if [ \"$currentBranch\" = \"main\" ] || [ \"$currentBranch\" = \"next\" ]; then \
             echo \"ERROR: You cannot 'finish' the $currentBranch branch.\"; return 1; \
         fi; \
+        if [ -n \"$(git ls-files --others --exclude-standard)\" ]; then \
+            echo \"ERROR: You have untracked files. Please add or delete them.\"; \
+            return 1; \
+        fi; \
         case \"$currentBranch\" in \
             release/*|hotfix/*) \
                 type=\"${currentBranch%/*}\"; \
@@ -126,6 +130,10 @@
         if [ -z \"$mode\" ]; then \
             echo \"ERROR: usage: git start topic <branch-name>    Start a topic branch\"; \
             echo \"       usage: git start -r <version-tag>       Start a release\"; \
+            return 1; \
+        fi; \
+        if [ -n \"$(git ls-files --others --exclude-standard)\" ]; then \
+            echo \"ERROR: You have untracked files I can't autostash. Please add or delete them.\"; \
             return 1; \
         fi; \
         case \"$mode\" in \
