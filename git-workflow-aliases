@@ -11,7 +11,7 @@
         git fetch --all --prune; \
         branchName=\"${1:-$(git branch --show-current)}\"; \
         git switch \"$branchName\"; \
-        git pull --rebase; \
+        git pull --rebase origin \"$current\"; \
     }; f"
 
     c = "!f() { \
@@ -34,8 +34,13 @@
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
         current=\"$(git branch --show-current)\"; \
-        git fetch \"$current\"; \
-        git pull --rebase; \
+        if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
+            echo \"Branch exists on remote. Syncing...\"; \
+            git fetch origin \"$current\"; \
+            git pull --rebase origin \"$current\"; \
+        else \
+            echo \"Branch does not exist on remote yet. Skipping pull.\"; \
+        fi; \
         git add -u && git commit -m \"$message\"; \
         git push -u origin \"$current\"; \
     }; f"
