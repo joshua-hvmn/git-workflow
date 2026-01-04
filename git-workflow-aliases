@@ -113,6 +113,7 @@
 
     qcp = "!f() { \
         message=\"$1\"; \
+        current=\"$(git branch --show-current)\"; \
         git qc \"$message\"; \
         git push -u origin \"$current\"; \
     }; f"
