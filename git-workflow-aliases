@@ -3,22 +3,74 @@
 
     graph = log --graph --oneline --all --decorate --color
 
-    aa = add -u
+    aa = add .
+
+    au = add -u
 
     s = status -sb
 
+    st = status
+
+    b = branch
+
+    sq = "!f() { name=\"${1:-next}\" && git rebase -i \"$name\"; }; f"
+
+    ps = "!f() { \
+        current=\"$(git branch --show-current)\"; \
+        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
+            read -r -p \"On $current. Are you sure you want to push? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
+        if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
+            echo \"Branch exists on remote. Syncing...\"; \
+            git fetch origin \"$current\"; \
+            git stash -u; \
+            git pull --rebase origin \"$current\"; \
+            git stash pop; \
+        else \
+            echo \"Branch does not exist on remote yet. Pushing anyway.\"; \
+        fi; \
+        git push -u origin \"$current\"; \
+    }; f"
+
     forceUp = "!f() { \
-        current=\"${1:-$(git branch --show-current)}\"; \
-        push --force-with-lease origin \"$current\"; \
+        choice=\"${1:-$(git branch --show-current)}\"; \
+        if [ \"$choice\" = \"main\" ] || [ \"$choice\" = \"next\" ]; then \
+            read -r -p \"Are you sure you want to push $choice? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
+        git push --force-with-lease origin \"$choice\"; \
     }; f"
     
-    sync = "!f() { \
-        git fetch --all --prune; \
+    fprune = fetch --all --prune
+
+    rbpull = "!f() { \
         current=\"${1:-$(git branch --show-current)}\"; \
         git switch \"$current\"; \
         git stash -u; \
         git pull --rebase origin \"$current\"; \
         git stash pop; \
+    }; f"
+
+    sync = "!f() { \
+        git fprune; \
+        git rbpull; \
     }; f"
 
     c = "!f() { \
@@ -34,21 +86,39 @@
 
     qc = "!f() { \
         message=\"$1\"; \
+        current=\"$(git branch --show-current)\"; \
+        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
+            read -r -p \"On $current. Are you sure you want to commit? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
         if [ -z \"$message\" ]; then \
             read -r -p \"Enter a commit message: \" message; \
         fi; \
         if [ -z \"$message\" ]; then \
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
-        current=\"$(git branch --show-current)\"; \
         if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
             echo \"Branch exists on remote. Syncing...\"; \
             git fetch origin \"$current\"; \
-            git pull --rebase --autostash origin \"$current\"; \
+            git rbpull \"$current\"; \
         else \
             echo \"Branch does not exist on remote yet. Skipping pull.\"; \
         fi; \
         git add -u && git commit -m \"$message\"; \
+    }; f"
+
+    qcp = "!f() { \
+        message=\"$1\"; \
+        current=\"$(git branch --show-current)\"; \
+        git qc \"$message\"; \
         git push -u origin \"$current\"; \
     }; f"
 
@@ -97,6 +167,7 @@
 
 
     finish = "!f() { \
+        git fprune; \
         currentBranch=$(git branch --show-current); \
         if [ \"$currentBranch\" = \"main\" ] || [ \"$currentBranch\" = \"next\" ]; then \
             echo \"ERROR: You cannot 'finish' the $currentBranch branch.\"; return 1; \
@@ -112,14 +183,13 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && \
-                git pull --rebase && \
+                git rbpull main; \
                 git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
                 git switch next && \
                 git merge --ff-only main && \
                 git push origin main next --tags && \
-                echo \"RUN: git deleteBranch $currentBranch yes\"; \
+                git deleteBranch $currentBranch; \
                 ;; \
             *) \
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
@@ -128,12 +198,13 @@
                 git switch next && \
                 git merge --no-ff \"$currentBranch\" && \
                 git push origin next && \
-                echo \"RUN: git deleteBranch $currentBranch yes\"; \
+                git deleteBranch $currentBranch; \
                 ;; \
         esac; \
     }; f"
 
     start = "!f() { \
+        git fprune; \
         git rev-parse --verify next || { echo \"Could not find 'next' branch.\"; return 1; }; \
         mode=\"$1\"; \
         if [ -z \"$mode\" ]; then \
@@ -154,9 +225,7 @@
                 if [ -z \"$branchName\" ]; then \
                     echo \"No branch name provided. Exiting.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch next && \
-                git pull --rebase --autostash; \
+                git rbpull next; \
                 git switch -c \"$branchName\" next; \
                 git push -u origin \"$branchName\"; \
                 ;; \
@@ -168,9 +237,7 @@
                 if [ -z \"$fixName\" ]; then \
                     echo \"No name provided. Aborted.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch main && \
-                git pull --rebase --autostash; \
+                git rbpull main; \
                 git switch -c \"hotfix/$fixName\" main; \
                 git push -u origin \"hotfix/$fixName\"; \
                 ;; \
@@ -182,9 +249,7 @@
                 if [ -z \"$version\" ]; then \
                     echo \"No version provided. Aborted.\"; return 1; \
                 fi; \
-                git fetch --all --prune; \
-                git switch next && \
-                git pull --rebase --autostash; \
+                git rbpull next; \
                 git switch -c \"release/$version\" next; \
                 git push -u origin \"release/$version\"; \
                 ;; \
