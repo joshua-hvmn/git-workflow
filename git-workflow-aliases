@@ -7,6 +7,11 @@
 
     s = status -sb
 
+    forceUp = "!f() { \
+        current=\"${1:-$(git branch --show-current)}\"; \
+        push --force-with-lease origin \"$current\"; \
+    }; f"
+    
     sync = "!f() { \
         git fetch --all --prune; \
         current=\"${1:-$(git branch --show-current)}\"; \
