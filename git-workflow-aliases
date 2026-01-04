@@ -34,7 +34,7 @@
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
         current=\"$(git branch --show-current)\"; \
-        git fetch $current; \
+        git fetch \"$current\"; \
         git pull --rebase; \
         git add -u && git commit -m \"$message\"; \
         git push -u origin \"$current\"; \
