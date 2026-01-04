@@ -185,7 +185,7 @@
                 git switch next && \
                 git merge --ff-only main && \
                 git push origin main next --tags && \
-                echo \"RUN: git deleteBranch $currentBranch yes\"; \
+                git deleteBranch $currentBranch; \
                 ;; \
             *) \
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
@@ -194,7 +194,7 @@
                 git switch next && \
                 git merge --no-ff \"$currentBranch\" && \
                 git push origin next && \
-                echo \"RUN: git deleteBranch $currentBranch yes\"; \
+                git deleteBranch $currentBranch; \
                 ;; \
         esac; \
     }; f"
