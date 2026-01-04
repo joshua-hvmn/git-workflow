@@ -9,9 +9,15 @@
 
     sync = "!f() { \
         git fetch --all --prune; \
-        branchName=\"${1:-$(git branch --show-current)}\"; \
-        git switch \"$branchName\"; \
+        current=\"${1:-$(git branch --show-current)}\"; \
+        git switch \"$current\"; \
+        if [ -n "$(git ls-files --others --exclude-standard)" ]; then \
+            echo "ERROR: You have untracked files. Please add or delete them."; \
+            return 1; \
+        fi; \
+        git stash -u; \
         git pull --rebase origin \"$current\"; \
+        git stash pop; \
     }; f"
 
     c = "!f() { \
@@ -37,7 +43,7 @@
         if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
             echo \"Branch exists on remote. Syncing...\"; \
             git fetch origin \"$current\"; \
-            git pull --rebase origin \"$current\"; \
+            git pull --rebase --autostash origin \"$current\"; \
         else \
             echo \"Branch does not exist on remote yet. Skipping pull.\"; \
         fi; \
@@ -97,7 +103,7 @@
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
                 read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
                 case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
-                git switch main && git pull --rebase && git merge --no-ff \"$currentBranch\" && \
+                git switch main && git pull --rebase --autostash && git merge --no-ff \"$currentBranch\" && \
                 git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
                 git switch next && git merge --no-ff \"main\" && \
                 git push origin main next --tags && \
@@ -132,7 +138,7 @@
                     echo \"No branch name provided. Exiting.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch next && git pull --rebase; \
+                git switch next && git pull --rebase --autostash; \
                 git switch -c \"$branchName\" next; \
                 git push -u origin \"$branchName\"; \
                 ;; \
@@ -145,7 +151,7 @@
                     echo \"No name provided. Aborted.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch main && git pull --rebase; \
+                git switch main && git pull --rebase --autostash; \
                 git switch -c \"hotfix/$fixName\" main; \
                 git push -u origin \"hotfix/$fixName\"; \
                 ;; \
@@ -158,7 +164,7 @@
                     echo \"No version provided. Aborted.\"; return 1; \
                 fi; \
                 git fetch --all --prune; \
-                git switch next && git pull --rebase; \
+                git switch next && git pull --rebase --autostash; \
                 git switch -c \"release/$version\" next; \
                 git push -u origin \"release/$version\"; \
                 ;; \
