@@ -3,13 +3,59 @@
 
     graph = log --graph --oneline --all --decorate --color
 
-    aa = add -u
+    aa = add .
+
+    au = add -u
 
     s = status -sb
 
+    st = status
+
+    b = branch
+
+    sq = "!f() { name=\"${1:-next}\" && git rebase -i \"$name\"; }; f"
+
+    ps = "!f() {
+        current=\"$(git branch --show-current)\"; \
+        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
+            read -r -p \"On $current. Are you sure you want to push? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
+        if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
+            echo \"Branch exists on remote. Syncing...\"; \
+            git fetch origin \"$current\"; \
+            git stash -u; \
+            git pull --rebase origin \"$current\"; \
+            git stash pop; \
+        else \
+            echo \"Branch does not exist on remote yet. Pushing anyway.\"; \
+        fi; \
+        git push -u origin \"$current\"; \
+    }; f"
+
     forceUp = "!f() { \
-        current=\"${1:-$(git branch --show-current)}\"; \
-        push --force-with-lease origin \"$current\"; \
+        choice=\"${1:-$(git branch --show-current)}\"; \
+        if [ \"$choice\" = \"main\" ] || [ \"$choice\" = \"next\" ]; then \
+            read -r -p \"Are you sure you want to push $choice? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
+        push --force-with-lease origin \"$choice\"; \
     }; f"
     
     sync = "!f() { \
@@ -34,17 +80,64 @@
 
     qc = "!f() { \
         message=\"$1\"; \
+        current=\"$(git branch --show-current)\"; \
+        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
+            read -r -p \"On $current. Are you sure you want to commit? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
         if [ -z \"$message\" ]; then \
             read -r -p \"Enter a commit message: \" message; \
         fi; \
         if [ -z \"$message\" ]; then \
             echo \"No message provided. Aborted.\"; return 1; \
         fi; \
-        current=\"$(git branch --show-current)\"; \
         if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
             echo \"Branch exists on remote. Syncing...\"; \
             git fetch origin \"$current\"; \
-            git pull --rebase --autostash origin \"$current\"; \
+            git stash -u; \
+            git pull --rebase origin \"$current\"; \
+            git stash pop; \
+        else \
+            echo \"Branch does not exist on remote yet. Skipping pull.\"; \
+        fi; \
+        git add -u && git commit -m \"$message\"; \
+    }; f"
+
+    qcp = "!f() { \
+        message=\"$1\"; \
+        current=\"$(git branch --show-current)\"; \
+        if [ \"$current\" = \"main\" ] || [ \"$current\" = \"next\" ]; then \
+            read -r -p \"On $current. Are you sure you want to commit? [y/N] : \" confirm; \
+            case \"$confirm\" in \
+                [yY][eE][sS]|[yY]) \
+                    : \
+                    ;; \
+                *) \
+                    echo \"Aborted.\"; \
+                    return 1; \
+                    ;; \
+            esac; \
+        fi; \
+        if [ -z \"$message\" ]; then \
+            read -r -p \"Enter a commit message: \" message; \
+        fi; \
+        if [ -z \"$message\" ]; then \
+            echo \"No message provided. Aborted.\"; return 1; \
+        fi; \
+        if git ls-remote --exit-code --heads origin \"$current\" > /dev/null 2>&1; then \
+            echo \"Branch exists on remote. Syncing...\"; \
+            git fetch origin \"$current\"; \
+            git stash -u; \
+            git pull --rebase origin \"$current\"; \
+            git stash pop; \
         else \
             echo \"Branch does not exist on remote yet. Skipping pull.\"; \
         fi; \
