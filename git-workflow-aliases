@@ -144,7 +144,7 @@
                 git switch -c \"hotfix/$fixName\" main; \
                 git push -u origin \"hotfix/$fixName\"; \
                 ;; \
-            release|r|-r|--release) 
+            release|r|-r|--release) \
                 version=\"$2\"; \
                 if [ -z \"$version\" ]; then \
                     read -r -p \"Enter version tag (e.g. v1.2.3): \" version; \
