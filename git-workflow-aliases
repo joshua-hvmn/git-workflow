@@ -12,7 +12,7 @@
         branchName=\"${1:-$(git branch --show-current)}\"; \
         git switch \"$branchName\"; \
         git pull --rebase; \
-}; f"
+    }; f"
 
     c = "!f() { \
         message=\"$1\"; \
@@ -84,37 +84,22 @@
             echo \"ERROR: You cannot 'finish' the $currentBranch branch.\"; return 1; \
         fi; \
         case \"$currentBranch\" in \
-            release/*) \
+            release/*|hotfix/*) \
+                type=\"${currentBranch%/*}\"; \
+                versionTag=\"${currentBranch#*/}\"; \
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
-                read -p \"Merge commit '$currentBranch' into 'main', 'next', and push changes and tag? [y/N] \" confirm; \
-                case \"$confirm\" in \
-                    [yY][eE][sS]|[yY]) \
-                        : \
-                        ;; \
-                    *) \
-                        echo \"Aborted.\"; \
-                        return 1; \
-                        ;; \
-                esac; \
-                versionTag=\"${currentBranch#release/}\"; \
+                read -p \"Merge '$currentBranch' into main and next, push changes and tag? [y/N] \" confirm; \
+                case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
                 git switch main && git merge --no-ff \"$currentBranch\" && \
-                git tag -a \"$versionTag\" -m \"Release $versionTag\" && \
+                git tag -a \"$versionTag\" -m \"$type: $versionTag\" && \
                 git switch next && git merge --no-ff \"main\" && \
                 git push origin main next --tags && \
-                echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
+                echo \"RUN: git deleteBranch $currentBranch yes\"; \
                 ;; \
             *) \
                 echo \"Fix conflicts by rebasing or remerging first.\"; \
-                read -p \"Merge commit '$currentBranch' into 'next' and push? [y/N] \" confirm; \
-                case \"$confirm\" in \
-                    [yY][eE][sS]|[yY]) \
-                        : \
-                        ;; \
-                    *) \
-                        echo \"Aborted.\"; \
-                        return 1; \
-                        ;; \
-                esac; \
+                read -p \"Merge '$currentBranch' into next, and push changes? [y/N] \" confirm; \
+                case \"$confirm\" in [yY][eE][sS]|[yY]) : ;; *) echo \"Aborted.\"; return 1; ;; esac; \
                 git switch next && git merge --no-ff \"$currentBranch\" && \
                 git push origin next && \
                 echo \"RUN: git deleteBranch '$currentBranch' yes\"; \
@@ -144,7 +129,20 @@
                 git switch -c \"$branchName\" next; \
                 git push -u origin \"$branchName\"; \
                 ;; \
-            release|r|-r|--release) \
+            hotfix|h|-h|--hotfix) \
+                fixName=\"$2\"; \
+                if [ -z \"$fixName\" ]; then \
+                    read -r -p \"Enter hotfix branch name: \" fixName; \
+                fi; \
+                if [ -z \"$fixName\" ]; then \
+                    echo \"No name provided. Aborted.\"; return 1; \
+                fi; \
+                git fetch --all --prune; \
+                git switch main && git pull --rebase; \
+                git switch -c \"hotfix/$fixName\" main; \
+                git push -u origin \"hotfix/$fixName\"; \
+                ;; \
+            release|r|-r|--release) 
                 version=\"$2\"; \
                 if [ -z \"$version\" ]; then \
                     read -r -p \"Enter version tag (e.g. v1.2.3): \" version; \
