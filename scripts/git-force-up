@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Joshua Haveman
+#
+# This software is released under the MIT License, and is provided as is, without warranty.
+# Modify & distribute freely.
+
+#!/bin/bash
+
+set -euo pipefail
+
+## Where the scripts live
+# GIT_SCRIPTS_HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+script_path=$(
+    CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P
+)/$(basename -- "$0")
+GIT_SCRIPTS_HOME_DIR=$(dirname "$script_path")
+
+# Source util script
+. "$GIT_SCRIPTS_HOME_DIR/scripts/git-core-utils.sh"
