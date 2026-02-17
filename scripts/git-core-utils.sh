@@ -6,10 +6,16 @@
 
 #!/bin/bash
 
+# Include guard to prevent redundant parsing
+if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
+    return 0
+fi
+declare -g __CORE_UTILS_LOADED=1
+
 set -euo pipefail
 
 # Testing function
-# - set to 1 to mock docker and git commands
+ # - set to 1 to mock docker and git commands
 mock_test_mode=0
 if [ "${mock_test_mode:-0}" -eq 1 ]; then
     git() {
@@ -17,8 +23,10 @@ if [ "${mock_test_mode:-0}" -eq 1 ]; then
     }
 fi
 
-# Global variables
+# GLOBAL VARIABLES
 working-branch="$(git branch --show-current)"
+ # Global return variable for strings
+declare -g __RETURN_VAL
 
 # Functions
 
@@ -46,11 +54,12 @@ yes_no() {
 
 # enter commit message
 commit_message_check() {
-    local message="${1:-}"
+    local cmessage="${1:-}"
 
-    while true; do
-        if [ -z "$message" ]; then
-            read -r -p "Enter a commit message: " message
+    while [ -z "$message" ]; do
+            read -r -p "Enter a commit message: " cmessage
         fi
     done
+
+    __RETURN_VAL="$cmessage"
 }

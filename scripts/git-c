@@ -17,3 +17,8 @@ GIT_SCRIPTS_HOME_DIR=$(dirname "$script_path")
 
 # Source util script
 . "$GIT_SCRIPTS_HOME_DIR/scripts/git-core-utils.sh"
+
+normal_commit() {
+    commit_message_check
+    git commit -m "$__RETURN_VAL"
+}
