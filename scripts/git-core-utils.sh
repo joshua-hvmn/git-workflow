@@ -10,56 +10,79 @@
 if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
     return 0
 fi
-declare -g __CORE_UTILS_LOADED=1
-
-set -euo pipefail
+__CORE_UTILS_LOADED=1
 
 # Testing function
- # - set to 1 to mock docker and git commands
-mock_test_mode=0
-if [ "${mock_test_mode:-0}" -eq 1 ]; then
+ # - run 'TEST_MODE=1 <script name> [args]'
+: "${TEST_MODE:=0}"
+if [ "$TEST_MODE" -eq 1 ]; then
     git() {
         printf '%s\n' "[MOCK] git $*"
     }
 fi
 
-# GLOBAL VARIABLES
-working-branch="$(git branch --show-current)"
- # Global return variable for strings
-declare -g __RETURN_VAL
+# GLOBAL VARIABLES - keeping here for now, load in scripts that need it
+# working_branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo '')"
 
 # Functions
+
+
 
 # yes or no
 yes_no() {
     local message="${1:-"Null"}"
-    local confirmation
 
-    while true; do
-        read -p "$message [y/N]" confirmation
-
-        case "$confirmation" in;
-        [yY]|[yY][eE][sS])
+    while :; do
+        if ! read -r -p "$message [y/N]: " REPLY; then
+            printf '\nAborted.\n' >&2
             return 1
-            ;;
-        ""|[nN]|[nN][oO])
+        fi
+
+        case "$REPLY" in
+        [yY]|[yY][eE][sS])
             return 0
             ;;
+        ""|[nN]|[nN][oO])
+            return 1
+            ;;
         *)
-            echo "Invalid choice."
+            printf 'Invalid choice.\n' >&2
             ;;
         esac
     done
 }
 
+# check for staged files
+check_files_staged() {
+    if git diff --cached --quiet --; then
+        printf '\nNo files are staged for commit.\n' >&2
+        
+        if yes_no "Stage all tracked and untracked files now?"; then
+            git add -A
+            # check for staged files again to make sure fr
+            if git diff --cached --quiet --; then
+                printf '\nAbort: working tree is clean. Nothing to stage.\n' >&2
+                return 1
+            fi
+        else
+            printf '\nCommit aborted.\n' >&2
+            return 1
+        fi
+    fi
+}
+
 # enter commit message
 commit_message_check() {
-    local cmessage="${1:-}"
+    REPLY="${1:-}"
 
-    while [ -z "$message" ]; do
-            read -r -p "Enter a commit message: " cmessage
+    while :; do
+        case "$REPLY" in
+            *[![:space:]]*) break ;;
+        esac
+
+        if ! read -r -p "Enter a commit message: " REPLY; then
+            printf '\nCommit aborted.\n' >&2
+            return 1
         fi
     done
-
-    __RETURN_VAL="$cmessage"
 }

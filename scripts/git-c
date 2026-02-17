@@ -6,19 +6,40 @@
 
 #!/bin/bash
 
-set -euo pipefail
+set -eu
 
-## Where the scripts live
-# GIT_SCRIPTS_HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-script_path=$(
-    CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P
-)/$(basename -- "$0")
-GIT_SCRIPTS_HOME_DIR=$(dirname "$script_path")
-
+# Find script dir
+if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
+    script_path=${BASH_SOURCE[0]}
+    case $script_path in
+        */*) script_dir=${script_path%/*} ;;
+        *) script_dir=. ;;
+    esac
+    
+    GIT_SCRIPTS_HOME_DIR=$(cd "$script_dir" && pwd)
+    export GIT_SCRIPTS_HOME_DIR
+fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/scripts/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/git-core-utils.sh"
 
-normal_commit() {
-    commit_message_check
-    git commit -m "$__RETURN_VAL"
+# FUNCTIONS
+commit_pre_checks() {
+    local mode="${1:-}"
+    shift
+
+    if [ "$mode" != "amend" ]; then
+        check_files_staged || exit 1
+    fi
+    commit_message_check "$*" || exit 1
 }
+
+# MAIN
+# check for amend arg
+if [ "${1:-}" = "--amend" ]; then
+    shift
+    commit_pre_checks "amend" "$@"
+    git commit --amend -m "$REPLY"
+    exit 0
+fi
+commit_pre_checks "normal" "$@"
+git commit -m "$REPLY"
