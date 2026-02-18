@@ -39,20 +39,20 @@ esac
 working_branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo '')"
 
 case "$working_branch" in
-    main|master|next|"")
+    main|master|next)
         if yes_no "On $working_branch, are you sure you want to commit?"; then
             :
         else
             printf "\nAborted\n" >&2
-            exit 0
+            exit 1
         fi
         ;;
 esac
 
 if git ls-remote --exit-code --heads origin "$working_branch" > /dev/null 2>&1; then
     printf "\nBranch exists on remote. Syncing...\n" >&2
-    git fetch origin "$working_branch"
-    git rbpull "$working_branch"
+#    git fetch origin "$working_branch"
+    "$GIT_SCRIPTS_HOME_DIR/git-rb-pull" "$working_branch"
 fi
 
 "$GIT_SCRIPTS_HOME_DIR/git-c" "$@"
