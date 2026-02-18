@@ -20,4 +20,8 @@ if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/scripts/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/git-core-utils.sh"
+
+# MAIN
+squash_against="${1:-next}"
+exec git rebase -i "$squash_against"
