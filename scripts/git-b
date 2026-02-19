@@ -7,6 +7,7 @@
 #!/bin/bash
 
 set -eu
+[ $# -eq 0 ] && exec git branch
 
 # Find script dir
 if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
@@ -22,3 +23,18 @@ fi
 # Source util script
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-branch-utils.sh"
+
+B_SUBCMD="${1:-}"
+shift
+
+case "$B_SUBCMD" in
+    start)
+        ;;
+    finish)
+        ;;
+    delete)
+        delete_branch "$@"
+        ;;
+    *)
+        exec git branch "$B_SUBCMD" "$@"
+esac

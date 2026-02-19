@@ -36,9 +36,15 @@ fi
 # - pass "commit" or "push"
 detect_protected_branch() {
     local type_msg="${1:-}"
-    case "$working_branch" in
-        main|master|next)
-            if yes_no "On $working_branch, are you sure you want to $type_msg?"; then
+    local current_branch="${2:-$working_branch}"
+
+    case "$current_branch" in
+        main|master|next|dev)
+            if [ "$type_msg" = "del_branch" ]; then
+                printf "\nAbort: you cannot delete $current_branch.\n" >&2
+                return 1
+            fi
+            if yes_no "On $current_branch, are you sure you want to $type_msg?"; then
                 :
             else
                 printf "\nAborted\n" >&2
