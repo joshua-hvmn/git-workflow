@@ -20,7 +20,7 @@ if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
 PS_MODE="${1:-}"
 case "$PS_MODE" in

@@ -29,8 +29,10 @@ shift
 
 case "$B_SUBCMD" in
     start)
+        start_branch "$@"
         ;;
     finish)
+        finish_branch "$@"
         ;;
     delete)
         delete_branch "$@"

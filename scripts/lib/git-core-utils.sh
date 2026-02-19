@@ -19,6 +19,23 @@ get_working_branch() {
     git symbolic-ref --short HEAD 2>/dev/null || echo ''
 }
 
+get_user_input() {
+    local user_input="${1:-}"
+    local prompt_msg="${2:-}"
+    REPLY=""
+    if [ -z "$user_input" ] || [ "$user_input" = "null" ]; then
+        while true; do
+            read -r -p "$prompt_msg " REPLY
+            if [ -n "$REPLY" ]; then
+                break
+            fi
+        done
+    else
+        REPLY="$user_input"
+        return 0
+    fi
+}
+
 # Testing function
  # - run 'TEST_MODE=1 <script name> [args]'
  # - sets working branch
@@ -40,10 +57,16 @@ detect_protected_branch() {
 
     case "$current_branch" in
         main|master|next|dev)
-            if [ "$type_msg" = "del_branch" ]; then
-                printf "\nAbort: you cannot delete $current_branch.\n" >&2
-                return 1
-            fi
+            case "$type_msg" in
+                "del_branch")
+                    printf "\nAbort: you cannot delete $current_branch.\n" >&2
+                    return 1
+                    ;;
+                "fin_branch")
+                    printf "\nAbort: you cannot finish $current_branch.\n" >&2
+                    return 1
+                    ;;
+            esac
             if yes_no "On $current_branch, are you sure you want to $type_msg?"; then
                 :
             else
