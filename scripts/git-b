@@ -20,4 +20,5 @@ if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/scripts/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-branch-utils.sh"

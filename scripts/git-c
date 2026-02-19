@@ -20,26 +20,7 @@ if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/git-core-utils.sh"
-
-# FUNCTIONS
-commit_pre_checks() {
-    local mode="${1:-}"
-    shift
-
-    if [ "$mode" != "amend" ]; then
-        check_files_staged || exit 1
-    fi
-    commit_message_check "$*" || exit 1
-}
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
 # MAIN
-# check for amend arg
-if [ "${1:-}" = "--amend" ]; then
-    shift
-    commit_pre_checks "amend" "$@"
-    git commit --amend -m "$REPLY"
-    exit 0
-fi
-commit_pre_checks "normal" "$@"
-git commit -m "$REPLY"
+commit_function "$@"

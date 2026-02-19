@@ -20,30 +20,6 @@ if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
-. "$GIT_SCRIPTS_HOME_DIR/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
-if [ "${1:-}" ]; then
-    current=$1
-else
-    current=$(git symbolic-ref --short HEAD 2>/dev/null) || {
-        printf '\nNot on a branch.\n' >&2
-        exit 1
-    }
-fi
-
-git switch "$current"
-
-# Record old stash
-old_stash=$(git rev-parse -q --verify refs/stash || echo "")
-
-git stash push -u -m "git-rb-pull autostash" || true
-
-# Record new stash
-new_stash=$(git rev-parse -q --verify refs/stash || echo "")
-
-git pull --rebase origin "$current"
-
-# Pop if necessary
-if [ "$old_stash" != "$new_stash" ]; then
-    git stash pop || exit 1
-fi
+rb_pull_function "$@"
