@@ -1,10 +1,10 @@
+#!/bin/bash
+
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
 #
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
-
-#!/bin/bash
 
 # Include guard to prevent redundant parsing
 if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
@@ -79,19 +79,35 @@ detect_protected_branch() {
 
 # yes or no
 yes_no() {
-    local message="${1:-"Null"}"
+    local yn_message="${1:-"Null"}"
+    local yn_default="${2:-'n'}"
+    local yn_options
 
+    case "$yn_default" in
+        [yY]|[yY][eE][sS])
+            yn_options="[Y/n]"
+            yn_default="y"
+            ;;
+        *)
+            yn_options="[y/N]"
+            yn_default="n"
+            ;;
+    esac
     while :; do
-        if ! read -r -p "$message [y/N]: " REPLY; then
+        if ! read -r -p "$yn_message $yn_options: " REPLY; then
             printf '\nAborted.\n' >&2
             return 1
+        fi
+        
+        if [ -z "$REPLY" ]; then
+            REPLY="$yn_default"
         fi
 
         case "$REPLY" in
         [yY]|[yY][eE][sS])
             return 0
             ;;
-        ""|[nN]|[nN][oO])
+        [nN]|[nN][oO])
             return 1
             ;;
         *)
@@ -105,8 +121,8 @@ yes_no() {
 check_files_staged() {
     if git diff --cached --quiet --; then
         printf '\nNo files are staged for commit.\n' >&2
-        
-        if yes_no "Stage all tracked and untracked files now?"; then
+        git status -sb
+        if yes_no "Stage all tracked and untracked files now?" "y"; then
             git add -A
             # check for staged files again to make sure fr
             if git diff --cached --quiet --; then
@@ -118,6 +134,7 @@ check_files_staged() {
             return 1
         fi
     fi
+    return 0
 }
 
 # enter commit message
@@ -165,21 +182,19 @@ rb_pull_function() {
     fi
     
     git switch "$current"
-    
-    # Record old stash
-    old_stash=$(git rev-parse -q --verify refs/stash 2>/dev/null || :)
-    
-    git stash push -u -m "git-rb-pull autostash" || true
-    
-    # Record new stash
-    new_stash=$(git rev-parse -q --verify refs/stash || echo "")
-    
-    git pull --rebase origin "$current"
-    
-    # Pop if necessary
-    if [ "$old_stash" != "$new_stash" ]; then
-        git stash pop || return 1
-    fi
+    # OLD manual stash logic to stash untracked
+    # # Record old stash
+    # old_stash=$(git rev-parse -q --verify refs/stash 2>/dev/null || :)
+    # git stash push -u -m "git-rb-pull autostash" || true
+    # # Record new stash
+    # new_stash=$(git rev-parse -q --verify refs/stash || echo "")
+    # git pull --rebase origin "$current"
+    # # Pop if necessary
+    # if [ "$old_stash" != "$new_stash" ]; then
+    #     git stash pop --index || return 1
+    # fi
+
+    git pull --rebase --autostash origin "$current"
 }
 
 conditional_rb_pull() {

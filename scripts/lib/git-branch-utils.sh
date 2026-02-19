@@ -1,10 +1,10 @@
+#!/bin/bash
+
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
 #
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
-
-#!/bin/bash
 
 # Include guard to prevent redundant parsing
 if [ -n "${__BRANCH_UTILS_LOADED:-}" ]; then
@@ -90,7 +90,7 @@ start_branch() {
 
 finish_branch() {
     local finish_choice="${1:-$working_branch}"
-    local finisn_type
+    local finish_type
     local finish_version
 
     detect_protected_branch "fin_branch" "$finish_choice" || return 1

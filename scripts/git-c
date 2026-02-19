@@ -1,11 +1,10 @@
+#!/bin/bash
+
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
 #
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
-
-#!/bin/bash
-
 set -eu
 
 # Find script dir
