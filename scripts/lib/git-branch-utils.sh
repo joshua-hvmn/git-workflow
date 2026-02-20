@@ -118,7 +118,7 @@ finish_branch() {
             delete_branch "$finish_choice" || return 1
             ;;
         *)
-            if ! yes_no "Merge '$finish_choice' into next, push changes?"; then
+            if ! yes_no "Merge '$finish_choice' into next, push changes?" "y"; then
                 return 1
             fi
             rb_pull_function "next" || return 1
