@@ -37,14 +37,14 @@ case "$PS_MODE" in
         ;;
 esac
 
-detect_protected_branch "push"
-conditional_rb_pull
-
 case $PS_MODE in
     default)
+        detect_protected_branch "push"
+        conditional_rb_pull
         git push -u origin "$working_branch"
         ;;
     force)
+        detect_protected_branch "push"
         git push --force-with-lease origin "$working_branch"
         ;;
 esac
