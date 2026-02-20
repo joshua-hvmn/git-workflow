@@ -1,16 +1,36 @@
 # Joshua's Git Aliases
 
-This repo contains my git aliases and will eventually be extended to use dedicated scripts. It enforces a somewhat simplified Git Flow structure.
+This repo contains my git aliases and scripts. Feel free to use them.
 
-To use the aliases, copy and paste the contents of the `git-workflow-aliases` file into `~/.gitconfig`
+# Usage
+To use the aliases, copy the contents of `/alias-core/git-workflow-aliases` into your `.gitconfig`.
 
-If you want to check them out, proceed with caution. I am new to computer science. I plan on moving the aliases into a stack of bash scripts.
+To use the scripts as aliases, move the contents of the `/scripts/` folder into your `$PATH`.
 
-I use `next` instead of `dev` because I don't want to rename the branch on my other project. Make sure the naming conventions I use match your use case.
+The scripts enforce Git Flow, but they use development branch name "next" instead of "dev".
 
+# All Aliases
+
+
+| Command | Description |
+| --------------------------------------------------------------------------- | ------- |
+| `git s`:                                                                    |  short status |
+| `git lg`:                                                                   | beautiful graph/log |
+| `git graph`:                                                                | ugly graph/log |
+| `git aa`:                                                                   | `git add .` |
+| `git au`:                                                                   | add tracked / modded files |
+| `git sync [branch]`:                                                        | update a branch to the remote |
+| `git sq [branch]`:                                                        | squash commits: `git rebase -i next` |
+| `git c [message]`:                                                          | commit wrapper |
+| `git qc [p] [message]`:                                                         | smart Git Flow commit, and push to current remote branch |
+| `git b [subcommand] [args]`:   | use the branch commands |
+| `git b start [topic/release/hotfix] [name/tag]`:                              | start branches automatically for Git Flow strategy|
+| `git b finish`: |  run from the branch you want to finish, detects if release: merge to main and next, else merge to next |
+
+# `git b`
 ## Start Branch
 
-`git start [t/h/r] [name/version]`
+`git b start [t/h/r] [name/version]`
 - This command will start a topic branch, release branch, or hotfix branch.
 
 #### What happens when you `start`:
@@ -35,7 +55,7 @@ I use `next` instead of `dev` because I don't want to rename the branch on my ot
 
 ## Finish Branch
 
-`git finish`
+`git b finish [branch name]`
 - This command will automatically handle merging a topic branch, release branch, or hotfix branch.
 - It detects the branch you are trying to finish, and asks for confirmation (errors out if you try to finish main or next)
 
@@ -57,13 +77,29 @@ I use `next` instead of `dev` because I don't want to rename the branch on my ot
 
 ## Delete Branch
 
-`git deleteBranch [name optional] [-y to skip confirmation - must use name]`
+`git b delete [name optional] [-y to skip confirmation - must use name]`
 - This deletes the named branch or the current branch if you don't provide a name.
 - Asks for confirmation unless you pass something like yes or -y. To skip confirmation, you have to reference the branch by name or it won't work.
 - Prohibits deletion of `main` and `next` branches.
 - Error out if you have untracked files in the branch (PLANNED: -D to skip this check)
 - automatically switches to next if you are in the branch you want to delete, and switches back if you abort.
 - Deletes local and remote.
+
+# Other commands
+## Quick Commit and Push
+
+`git qc ['p' flag]"Message"`
+- If you don't provide a message, it reads a response from you. It will abort with an empty response.
+- If the branch is on the remote it updates the local version with pull --rebase --autostash.
+- If no staged changes, prompts for `git add -A`, commits with the given message, and pushes to current  branch on the remote.
+- 'p' flag makes it auto push.
+
+## Push
+
+`git ps ['force' flag]`
+- By default, wraps `git push -u origin [current branch]`
+- pass 'force' to run `git push --force-with-lease origin [current branch]`
+
 
 ## Sync
 
@@ -72,26 +108,3 @@ I use `next` instead of `dev` because I don't want to rename the branch on my ot
 - Stashes untracked files in the selected branch.
 - do git pull --rebase to update the local copy of the branch.
 - Pops untracked files out of stash (not autostash).
-
-## Quick Commit and Push
-
-`git qc "Message"`
-- If you don't provide a message, it reads a response from you. It will abort with an empty response.
-- If the branch is on the remote it updates the local version with pull --rebase --autostash.
-- Adds TRACKED files (add -u), commits with the given message, and pushes to current  branch on the remote.
-
-## All Aliases
-
-
-| Command | Description |
-| --------------------------------------------------------------------------- | ------- |
-| `git s`:                                                                    |  short status |
-| `git lg`:                                                                   | beautiful graph/log |
-| `git graph`:                                                                | ugly graph/log |
-| `git aa`:                                                                   | add tracked / modded files |
-| `git sync [branch]`:                                                        | update a branch to the remote |
-| `git c [message]`:                                                          | commit only without push |
-| `git qc [message]`:                                                         | combines add -u, commit, and push to current remote branch |
-| `git deleteBranch [branch name] [optional 'yes' to bypass confirmation]`:   | delete local and remote copy. pass without args to delete current branch |
-| `git start [topic/release/hotfix] [name/tag]`:                              | start branches automatically for Git Flow strategy|
-| `git finish`: |  run from the branch you want to finish, detects if release: merge to main and next, else merge to next |

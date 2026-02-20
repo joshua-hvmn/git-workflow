@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Joshua Haveman
+#
+# This software is released under the MIT License, and is provided as is, without warranty.
+# Modify & distribute freely.
+
+set -eu
+[ "$#" -eq 0 ] && exec git branch
+
+# Find script dir
+if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
+    script_path=${BASH_SOURCE[0]}
+    case $script_path in
+        */*) script_dir=${script_path%/*} ;;
+        *) script_dir=. ;;
+    esac
+    
+    GIT_SCRIPTS_HOME_DIR=$(cd "$script_dir" && pwd)
+    export GIT_SCRIPTS_HOME_DIR
+fi
+# Source util script
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-branch-utils.sh"
+
+B_SUBCMD="${1:-}"
+shift
+
+case "$B_SUBCMD" in
+    start)
+        start_branch "$@"
+        ;;
+    finish)
+        finish_branch "$@"
+        ;;
+    delete)
+        delete_branch "$@"
+        ;;
+    *)
+        exec git branch "$B_SUBCMD" "$@"
+        ;;
+esac

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Joshua Haveman
+#
+# This software is released under the MIT License, and is provided as is, without warranty.
+# Modify & distribute freely.
+
+set -eu
+
+# MAIN
+squash_against="${1:-next}"
+exec git rebase -i "$squash_against"
