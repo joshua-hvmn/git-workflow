@@ -21,8 +21,8 @@ fi
 # FUNCTIONS
 
 check_clean_tree() {
-    if [ -n "$(git status --porcelain)" ]; then
-        printf "\nAbort: Working tree is dirty.\n"
+    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        printf "\nAbort: Working tree has files I can't autostash.\n"
         return 1
     fi
 }
@@ -118,7 +118,7 @@ finish_branch() {
             delete_branch "$finish_choice" || return 1
             ;;
         *)
-            if ! yes_no "Merge '$finish_choice' into next, push changes?" "y"; then
+            if ! yes_no "Merge '$finish_choice' into next, push changes?"; then
                 return 1
             fi
             rb_pull_function "next" || return 1
