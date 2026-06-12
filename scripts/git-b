@@ -7,7 +7,7 @@
 # Modify & distribute freely.
 
 set -eu
-[ "$#" -eq 0 ] && exec git branch
+[ "$#" -eq 0 ] && exec git --no-pager branch
 
 # Find script dir
 if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
