@@ -9,5 +9,5 @@
 set -eu
 
 # MAIN
-squash_against="${1:-next}"
+squash_against="${1:-$(git config --get workflow.devBranch || echo next)}"
 exec git rebase -i "$squash_against"

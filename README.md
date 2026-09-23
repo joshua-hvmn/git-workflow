@@ -1,110 +1,147 @@
-# Joshua's Git Aliases
+# git-workflow
 
-This repo contains my git aliases and scripts. Feel free to use them.
+Git subcommands that make a branching model the default path: **git flow** (`main` + `next`)
+or **trunk / GitHub flow** (`main` only), with SemVer releases, **prerelease tags you can
+test in CI before anything reaches `main`**, and guardrails that warn you (or stop you, in
+strict mode) when you step outside the flow.
 
-# Usage
-To use the aliases, copy the contents of `/alias-core/git-workflow-aliases` into your `.gitconfig`.
+Plain Bash plus `git`. No dependencies and no config file to parse. Settings live in `git config`.
 
-To use the scripts as aliases, move the contents of the `/scripts/` folder into your `$PATH`.
+```
+next ──●────●──────────────────●───────  ← topic branches merge here
+        \                     / (back-merge)
+release/v1.2.0 ──●──●────●───┘
+                 │  │    │
+            rc.1 ┘  rc.2 ┘   ← git b pre: tag + push → CI builds a GitHub *prerelease*
+                          \
+main ──────────────────────●── v1.2.0   ← git b finish: merge, tag, push atomically
+```
 
-The scripts enforce Git Flow, but they use development branch name "next" instead of "dev".
+## Install
 
-# All Aliases
+```sh
+git clone <repo-url> git-workflow && cd git-workflow
+make install              # symlinks git-* into ~/.local/bin, includes the aliases in ~/.gitconfig
+make install PREFIX=/usr/local
+make uninstall
+```
 
+Git runs any `git-<name>` executable on your `PATH` as `git <name>`. That is how tools like
+`git-lfs` and `git-flow` plug in, and it's why these are separate commands instead of a single
+entrypoint. The scripts find their `lib/` by resolving their own symlink, so the repo can live anywhere.
 
-| Command | Description |
-| --------------------------------------------------------------------------- | ------- |
-| `git s`:                                                                    |  short status |
-| `git lg`:                                                                   | beautiful graph/log |
-| `git graph`:                                                                | ugly graph/log |
-| `git aa`:                                                                   | `git add .` |
-| `git au`:                                                                   | add tracked / modded files |
-| `git sync [branch]`:                                                        | update a branch to the remote |
-| `git sq [branch]`:                                                        | squash commits: `git rebase -i next` |
-| `git c [message]`:                                                          | commit wrapper |
-| `git qc [p] [message]`:                                                         | smart Git Flow commit, and push to current remote branch |
-| `git b [subcommand] [args]`:   | use the branch commands |
-| `git b start [topic/release/hotfix] [name/tag]`:                              | start branches automatically for Git Flow strategy|
-| `git b finish`: |  run from the branch you want to finish, detects if release: merge to main and next, else merge to next |
+## Configuration
 
-# `git b`
-## Start Branch
+All settings are optional. Set them globally or per repository:
 
-`git b start [t/h/r] [name/version]`
-- This command will start a topic branch, release branch, or hotfix branch.
+| Key                        | Default    | Meaning                                                                      |
+| -------------------------- | ---------- | ---------------------------------------------------------------------------- |
+| `workflow.mainBranch`      | `main`     | production branch; stable tags live here                                     |
+| `workflow.devBranch`       | `next`     | integration branch. **Set it equal to `mainBranch` for trunk / GitHub flow** |
+| `workflow.remote`          | `origin`   | remote to sync with                                                          |
+| `workflow.releasePrefix`   | `release/` | release branch prefix                                                        |
+| `workflow.hotfixPrefix`    | `hotfix/`  | hotfix branch prefix                                                         |
+| `workflow.prereleaseLabel` | `rc`       | default label for `git b pre`                                                |
+| `workflow.strict`          | `false`    | `true`: flow violations abort. `false`: warn and ask                         |
+| `workflow.protected`       | —          | extra protected branches (multi-valued, `git config --add`)                  |
 
-#### What happens when you `start`:
-- Firstly, the alias errors out if you have untracked files because autostash can't stash them properly.
+```sh
+git config --global workflow.devBranch next     # everywhere
+git config workflow.devBranch main              # this repo uses GitHub flow
+git config workflow.strict true                 # this repo: no exceptions
+git -c workflow.strict=true b finish            # one-off
+git b config                                    # show effective settings
+```
 
+### Guardrails
 
-- `topic`:
-    1. Switch to next
-    2. fetch and pull --rebase --autofetch
-    3. Create topic branch as named and push to remote.
+The warnings below become hard stops when `workflow.strict=true`:
 
+- committing or pushing directly on a protected branch (`main`, `devBranch`, extras)
+- release/hotfix names that aren't `vX.Y.Z`, or aren't newer than the latest release
+- opening a second release branch while one is open (git flow allows one at a time)
+- cutting a prerelease from a branch that isn't a release/hotfix branch, or with a tag
+  whose version doesn't match the branch
+- tagging with uncommitted changes, or with commits the remote branch doesn't have
 
-- `hotfix`:
-    1. Switch to main
-    2. fetch and pull --rebase --autofetch
-    3. Create `hotfix/[tag]` branch and push to remote
+The following always stop: reusing an existing tag, prereleasing a version that already
+shipped, finishing or deleting a protected branch, and tagging a branch that is behind its remote.
 
-- `release`:
-    1. Switch to next.
-    2. fetch and pull --rebase --autofetch
-    3. Create `release/[tag]` branch and push to remote
+## `git b`: branches and releases
 
-## Finish Branch
+| Command                                       | Description                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `git b`                                       | `git branch` (anything unrecognised passes through, e.g. `git b -vv`) |
+| `git b start <topic\|release\|hotfix> [name]` | start a branch from the right base and push it                        |
+| `git b pre [label\|tag] [-n] [-l]`            | tag the release branch as a prerelease and push the tag               |
+| `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |
+| `git b delete [branch] [-y]`                  | delete locally and on the remote                                      |
+| `git b config` / `git b help`                 | settings / usage                                                      |
 
-`git b finish [branch name]`
-- This command will automatically handle merging a topic branch, release branch, or hotfix branch.
-- It detects the branch you are trying to finish, and asks for confirmation (errors out if you try to finish main or next)
+### start
 
-#### What happens when you `finish`:
-- Errors out if you have untracked files.
-- Handles branching strategy.
-- NOTE: needs work, currently may fail if it can't complete a fast forward from main to next.
+- **topic**: branch from `devBranch`
+- **release**: `release/vX.Y.Z` from `devBranch` (version validated against existing tags)
+- **hotfix**: `hotfix/vX.Y.Z` from `mainBranch`
 
-- `topic`:
-    1. Switch to next
-    2. Non-FF merge the topic into next to maintain history
-    3. Push and echo the command to delete (will be automated when I move these into scripts)
+Aborts if the tree has untracked files (autostash can't carry them).
 
-- `hotfix`or `release`:
-    1. Switch to main
-    2. Non-FF merge the hotfix or release branch into main branch
-    3. Create new version tag
-    3. Push and echo the command to delete (will be automated when I move these into scripts)
+### prerelease: test the release pipeline before `main`
 
-## Delete Branch
+```sh
+git b start release v1.2.0
+# ...commit fixes...
+git b pre              # tags v1.2.0-rc.1 and pushes it → CI publishes a GitHub prerelease
+# ...download the tarball, test it, fix things...
+git b pre              # v1.2.0-rc.2 (numbering continues from existing local + remote tags)
+git b pre beta         # v1.2.0-beta.1
+git b pre v1.2.0-rc.9  # exact tag
+git b pre -n           # dry run: show what would be tagged
+git b pre -l           # list prereleases for this version
+git b finish           # v1.2.0 on main
+```
 
-`git b delete [name optional] [-y to skip confirmation - must use name]`
-- This deletes the named branch or the current branch if you don't provide a name.
-- Asks for confirmation unless you pass something like yes or -y. To skip confirmation, you have to reference the branch by name or it won't work.
-- Prohibits deletion of `main` and `next` branches.
-- Error out if you have untracked files in the branch (PLANNED: -D to skip this check)
-- automatically switches to next if you are in the branch you want to delete, and switches back if you abort.
-- Deletes local and remote.
+Before tagging it fetches tags, pushes any unpushed branch commits (after asking), refuses
+if the branch is behind its remote, and prints the Actions URL to watch the run.
 
-# Other commands
-## Quick Commit and Push
+Delete a bad prerelease with `gh release delete v1.2.0-rc.1 --cleanup-tag`.
 
-`git qc ['p' flag]"Message"`
-- If you don't provide a message, it reads a response from you. It will abort with an empty response.
-- If the branch is on the remote it updates the local version with pull --rebase --autostash.
-- If no staged changes, prompts for `git add -A`, commits with the given message, and pushes to current  branch on the remote.
-- 'p' flag makes it auto push.
+### finish
 
-## Push
+- **topic**: `--no-ff` merge into `devBranch`, push, delete the branch.
+- **release / hotfix**: sync the branch, `--no-ff` merge into `mainBranch`, annotated tag
+  `vX.Y.Z`, back-merge `mainBranch` into `devBranch` (skipped in trunk mode), then
+  `git push --atomic` of the branches **and only that tag**. Lists the prereleases that were
+  cut, and flags when there were none.
 
-`git ps ['force' flag]`
-- By default, wraps `git push -u origin [current branch]`
-- pass 'force' to run `git push --force-with-lease origin [current branch]`
+`--atomic` means the remote gets everything or nothing. Pushing one explicit tag, not
+`--tags`, keeps stray local tags off the remote, and GitHub skips workflow runs when more
+than three tags arrive in a single push.
 
+### delete
 
-## Sync
+Deletes locally and remotely, asking first unless you pass `-y` with an explicit branch
+name. Won't delete protected branches. If you abort, you're switched back to the branch
+you were on.
 
-`git sync [name optional]`
-- Switches to the named branch if you defined one.
-- Stashes untracked files in the selected branch.
-- do git pull --rebase to update the local copy of the branch.
-- Pops untracked files out of stash (not autostash).
+## Other commands
+
+| Command                     | Description                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `git c [--amend] [message]` | commit; offers `git add -A` if nothing is staged, prompts for a message         |
+| `git qc [p] [message]`      | protected-branch check, sync with the remote, commit, and optionally push (`p`) |
+| `git ps [force]`            | `push -u` to the remote (after syncing); `force` → `--force-with-lease`         |
+| `git sync [branch]`         | `fetch --all --prune`, then `pull --rebase --autostash`                         |
+| `git rb-pull [branch]`      | `pull --rebase --autostash` for a branch                                        |
+| `git sq [base]`             | interactive rebase onto `devBranch` to squash                                   |
+
+## Aliases
+
+`alias-core/git-workflow-aliases` is a git config file (`make install` includes it):
+`git s`, `git st`, `git lg`, `git graph`, `git aa`, `git au`, `git fprune`.
+
+## CI pairing
+
+Designed to feed a tag-triggered release workflow (see wg-vpn's `.github/workflows/release.yml`):
+tags containing `-` publish as GitHub prereleases from any branch, and plain `vX.Y.Z` tags
+are rejected unless the commit is on `main`.
