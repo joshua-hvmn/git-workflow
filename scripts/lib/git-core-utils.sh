@@ -6,7 +6,8 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
-# shellcheck disable=SC2034  # globals here are consumed by the scripts that source this file
+# shellcheck disable=SC2034
+# globals here are consumed by the scripts that source this file
 
 # Include guard to prevent redundant parsing
 if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
