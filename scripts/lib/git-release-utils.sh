@@ -152,7 +152,16 @@ which triggers the release workflow (published as a GitHub prerelease).
 EOF
 }
 
+pre_flow_warn() {
+    if [ "$1" = "dry" ]; then
+        warn "$2"
+        return 0
+    fi
+    flow_warn "$2"
+}
+
 prerelease_branch() {
+    # shellcheck disable=SC2154
     local mode="create" arg="" branch="$working_branch"
     local base tag label latest sha existing url
 
@@ -187,10 +196,21 @@ prerelease_branch() {
     fi
 
     base=$(branch_version "$branch")
+
+    if [ "$mode" = "list" ]; then
+        if [ -z "$base" ] || ! is_stable_version "$base"; then
+            err "cannot list prereleases: no vX.Y.Z version in branch name '$branch'"
+            return 1
+        fi
+        sync_remote
+        prerelease_tags_for "$base"
+        return 0
+    fi
+
     if [ -z "$base" ]; then
-        flow_warn "prereleases are cut from '${RELEASE_PREFIX}*' or '${HOTFIX_PREFIX}*' branches; '$branch' is neither." || return 1
+        pre_flow_warn "$mode" "prereleases are cut from '${RELEASE_PREFIX}*' or '${HOTFIX_PREFIX}*' branches; '$branch' is neither." || return 1
     elif ! is_stable_version "$base"; then
-        flow_warn "branch version '$base' is not vX.Y.Z; cannot derive a prerelease tag from it." || return 1
+        pre_flow_warn "$mode" "branch version '$base' is not vX.Y.Z; cannot derive a prerelease tag from it." || return 1
         base=""
     fi
 
@@ -209,7 +229,7 @@ prerelease_branch() {
     if is_prerelease_version "$arg"; then
         tag="$arg"
         if [ -n "$base" ] && [ "${tag%%-*}" != "$base" ]; then
-            flow_warn "'$tag' does not match this branch's version '$base'." || return 1
+            pre_flow_warn "$mode" "'$tag' does not match this branch's version '$base'." || return 1
         fi
         base="${tag%%-*}"
     else
@@ -236,7 +256,7 @@ prerelease_branch() {
     fi
     latest=$(latest_stable_tag)
     if [ -n "$latest" ] && ! version_gt "$base" "$latest"; then
-        flow_warn "'$base' is not newer than the latest release '$latest'." || return 1
+        pre_flow_warn "$mode" "'$base' is not newer than the latest release '$latest'." || return 1
     fi
 
     sha=$(git rev-parse --short HEAD)

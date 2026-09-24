@@ -21,19 +21,34 @@ fi
 
 # FUNCTIONS
 
-check_clean_tree() {
+check_no_untracked() {
     if [ -n "$(git ls-files --others --exclude-standard)" ]; then
         err "working tree has files that autostash can't stash. Commit, stash -u, or ignore them first."
         return 1
     fi
 }
 
-check_for_branch() {
-    local target_branch="${1:-$DEV_BRANCH}"
-    if ! git rev-parse --verify --quiet "refs/heads/$target_branch" >/dev/null; then
-        err "could not find local branch '$target_branch'."
+require_clean_tree() {
+    check_no_untracked || return 1
+    if ! git diff --quiet HEAD -- 2>/dev/null; then
+        err "you have uncommitted changes. Commit or stash them first."
+        git status --short >&2
         return 1
     fi
+}
+
+check_for_branch() {
+    local target_branch="${1:-$DEV_BRANCH}"
+    git rev-parse --verify --quiet "refs/heads/$target_branch" >/dev/null && return 0
+
+    if remote_branch_exists "$target_branch"; then
+        git branch --quiet --track "$target_branch" "$REMOTE/$target_branch" || return 1
+        note "Created local '$target_branch' tracking '$REMOTE/$target_branch'."
+        return 0
+    fi
+
+    err "could not find local branch '$target_branch' locally or on '$REMOTE'."
+    return 1
 }
 
 # Other release branches, local or remote (gitflow allows one at a time)
@@ -46,7 +61,7 @@ other_release_branches() {
 
 start_branch() {
     local start_mode="${1:-}"
-    local new_branch_name="${2:-"null"}"
+    local new_branch_name="${2:-}"
     local new_branch_type="topic"
     local base_branch="$DEV_BRANCH"
     local prefix=""
@@ -79,7 +94,7 @@ start_branch() {
         ;;
     esac
 
-    check_clean_tree || return 1
+    check_no_untracked || return 1
     sync_remote
     check_for_branch "$base_branch" || return 1
 
@@ -109,11 +124,29 @@ start_branch() {
     git push -u "$REMOTE" "$full_branch_name"
 }
 
+finish_push_failed() {
+    local branch="$1" version="$2" refs="$3" main_before="$4" dev_before="${5:-}"
+
+    err "push to '$REMOTE' was rejected; nothing was published."
+    info "Locally, $refs and tag $version are ahead of '$REMOTE'. To retry the push:"
+    info "  git push --atomic $REMOTE $refs refs/tags/$version && git b delete $branch"
+
+    if yes_no "Roll back the local merge and tag instead (then fix the cause and run 'git b finish' again)?"; then
+        git switch --quiet "$branch" || return 1
+        git tag -d "$version" >/dev/null || return 1
+        git branch -f "$MAIN_BRANCH" "$main_before" || return 1
+        if [ -n "$dev_before" ]; then
+            git branch -f "$DEV_BRANCH" "$dev_before" || return 1
+        fi
+        info "Rolled back. You are on '$branch' again."
+    fi
+}
+
 finish_branch() {
     local finish_choice="${1:-$working_branch}"
     local finish_type=""
     local finish_version=""
-    local push_refs
+    local push_refs main_before="" dev_before=""
 
     if [ -z "$finish_choice" ]; then
         err "not on a branch; pass the branch to finish."
@@ -121,9 +154,9 @@ finish_branch() {
     fi
 
     detect_protected_branch "fin_branch" "$finish_choice" || return 1
-    check_clean_tree || return 1
-    check_for_branch "$finish_choice" || return 1
+    require_clean_tree || return 1
     sync_remote
+    check_for_branch "$finish_choice" || return 1
     check_for_branch "$MAIN_BRANCH" || return 1
     check_for_branch "$DEV_BRANCH" || return 1
 
@@ -160,6 +193,7 @@ finish_branch() {
         fi
 
         rb_pull_function "$MAIN_BRANCH" || return 1
+        main_before=$(git rev-parse "$MAIN_BRANCH")
         git merge --no-ff --no-edit -m "Merge $finish_type $finish_version" "$finish_choice" || return 1
         git tag -a "$finish_version" -m "$finish_type: $finish_version" || return 1
         push_refs="$MAIN_BRANCH"
@@ -167,6 +201,7 @@ finish_branch() {
         # If Git Flow, back merge from main to dev
         if [ "$TRUNK_MODE" -eq 0 ]; then
             rb_pull_function "$DEV_BRANCH" || return 1
+            dev_before=$(git rev-parse "$DEV_BRANCH")
             if ! git merge --ff-only "$MAIN_BRANCH" 2>/dev/null; then
                 git merge --no-edit "$MAIN_BRANCH" || {
                     err "back-merge of $MAIN_BRANCH into $DEV_BRANCH failed. Resolve, commit, then run:"
@@ -179,7 +214,10 @@ finish_branch() {
 
         # push_refs must be unquoted
         # shellcheck disable=SC2086
-        git push --atomic "$REMOTE" $push_refs "refs/tags/$finish_version" || return 1
+        if ! git push --atomic "$REMOTE" $push_refs "refs/tags/$finish_version"; then
+            finish_push_failed "$finish_choice" "$finish_version" "$push_refs" "$main_before" "$dev_before"
+            return 1
+        fi
     else
         yes_no "Merge '$finish_choice' into $DEV_BRANCH and push?" || return 1
         rb_pull_function "$DEV_BRANCH" || return 1
@@ -196,9 +234,9 @@ delete_branch() {
     local return_to=""
 
     detect_protected_branch "del_branch" "$delete_choice" || return 1
-    check_clean_tree || return 1
 
     if [ "$(get_working_branch)" = "$delete_choice" ]; then
+        require_clean_tree || return 1 # do not drag edits to dev during delete
         git switch "$DEV_BRANCH" || {
             err "failed to switch to $DEV_BRANCH (does it exist?)"
             return 1
