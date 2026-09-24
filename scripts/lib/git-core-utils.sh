@@ -6,13 +6,65 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
+# shellcheck disable=SC2034
+# globals here are consumed by the scripts that source this file
+
 # Include guard to prevent redundant parsing
 if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
     return 0
 fi
 __CORE_UTILS_LOADED=1
 
-# GLOBAL VARIABLES - keeping here for now, load in scripts that need it
+# OUTPUT HELPERS
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+    __C_RED=$'\033[31m' __C_YEL=$'\033[33m' __C_BLU=$'\033[34m' __C_RST=$'\033[0m'
+else
+    __C_RED='' __C_YEL='' __C_BLU='' __C_RST=''
+fi
+
+info() { printf '%s\n' "$*" >&2; }
+note() { printf '%s%s%s\n' "$__C_BLU" "$*" "$__C_RST" >&2; }
+warn() { printf '%sWarning:%s %s\n' "$__C_YEL" "$__C_RST" "$*" >&2; }
+err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# Configuration
+#
+# Everything is read from `git config`, so it can be set globally
+# (~/.gitconfig) or per repository (.git/config) with no extra config file:
+#
+#   git config workflow.mainBranch      main      # production branch
+#   git config workflow.devBranch       next      # integration branch (set = mainBranch for trunk/GitHub flow)
+#   git config workflow.remote          origin
+#   git config workflow.releasePrefix   release/
+#   git config workflow.hotfixPrefix    hotfix/
+#   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
+#   git config workflow.strict          false     # true = flow violations abort instead of asking
+#   git config --add workflow.protected staging   # extra protected branches (multi-valued)
+#
+# Loaded before the TEST_MODE mock below so config always comes from real git.
+# ---------------------------------------------------------------------------
+wf_config() {
+    local key="$1" default="${2:-}" value
+    value=$(git config --get "workflow.$key" 2>/dev/null) || value="$default"
+    printf '%s' "$value"
+}
+
+MAIN_BRANCH=$(wf_config mainBranch main)
+DEV_BRANCH=$(wf_config devBranch next)
+REMOTE=$(wf_config remote origin)
+RELEASE_PREFIX=$(wf_config releasePrefix release/)
+HOTFIX_PREFIX=$(wf_config hotfixPrefix hotfix/)
+PRERELEASE_LABEL=$(wf_config prereleaseLabel rc)
+STRICT=$(git config --type=bool --get workflow.strict 2>/dev/null) || STRICT=false
+EXTRA_PROTECTED=$(git config --get-all workflow.protected 2>/dev/null | tr '\n' ' ') || EXTRA_PROTECTED=''
+
+# GitHub / Trunk-based flow: no separate integration branch
+if [ "$DEV_BRANCH" = "$MAIN_BRANCH" ]; then
+    TRUNK_MODE=1
+else
+    TRUNK_MODE=0
+fi
 
 # Functions
 get_working_branch() {
@@ -25,7 +77,7 @@ get_user_input() {
     REPLY=""
     if [ -z "$user_input" ] || [ "$user_input" = "null" ]; then
         while true; do
-            read -r -p "$prompt_msg " REPLY
+            read -r -p "$prompt_msg " REPLY || return 1
             if [ -n "$REPLY" ]; then
                 break
             fi
@@ -37,8 +89,8 @@ get_user_input() {
 }
 
 # Testing function
- # - run 'TEST_MODE=1 <script name> [args]'
- # - sets working branch
+# - run 'TEST_MODE=1 <script name> [args]'
+# - sets working branch
 : "${TEST_MODE:=0}"
 if [ "$TEST_MODE" -eq 1 ]; then
     git() {
@@ -49,65 +101,37 @@ else
     working_branch=$(get_working_branch) || :
 fi
 
-# detect protected branch
-# - pass "commit" or "push"
-detect_protected_branch() {
-    local type_msg="${1:-}"
-    local current_branch="${2:-$working_branch}"
-
-    case "$current_branch" in
-        main|master|next|dev)
-            case "$type_msg" in
-                "del_branch")
-                    printf "\nAbort: you cannot delete $current_branch.\n" >&2
-                    return 1
-                    ;;
-                "fin_branch")
-                    printf "\nAbort: you cannot finish $current_branch.\n" >&2
-                    return 1
-                    ;;
-            esac
-            if yes_no "On $current_branch, are you sure you want to $type_msg?"; then
-                :
-            else
-                printf "\nAborted\n" >&2
-                return 1
-            fi
-            ;;
-    esac
-}
-
 # yes or no
 yes_no() {
     local yn_message="${1:-"Null"}"
-    local yn_default="${2:-'n'}"
+    local yn_default="${2:-n}"
     local yn_options
 
     case "$yn_default" in
-        [yY]|[yY][eE][sS])
-            yn_options="[Y/n]"
-            yn_default="y"
-            ;;
-        *)
-            yn_options="[y/N]"
-            yn_default="n"
-            ;;
+    [yY] | [yY][eE][sS])
+        yn_options="[Y/n]"
+        yn_default="y"
+        ;;
+    *)
+        yn_options="[y/N]"
+        yn_default="n"
+        ;;
     esac
     while :; do
         if ! read -r -p "$yn_message $yn_options: " REPLY; then
             printf '\nAborted.\n' >&2
             return 1
         fi
-        
+
         if [ -z "$REPLY" ]; then
             REPLY="$yn_default"
         fi
 
         case "$REPLY" in
-        [yY]|[yY][eE][sS])
+        [yY] | [yY][eE][sS])
             return 0
             ;;
-        [nN]|[nN][oO])
+        [nN] | [nN][oO])
             return 1
             ;;
         *)
@@ -117,20 +141,63 @@ yes_no() {
     done
 }
 
+# Flow violations: abort in strict mode, otherwise, warn and ask.
+# Returns 0 to continue and 1 to abort
+flow_warn() {
+    warn "$1"
+    if [ "$STRICT" = "true" ]; then
+        err "aborting (workflow.strict is enabled)."
+        return 1
+    fi
+    yes_no "Continue anyway?" || {
+        info "Aborted."
+        return 1
+    }
+}
+
+is_protected_branch() {
+    local branch="$1" p
+    for p in "$MAIN_BRANCH" "$DEV_BRANCH" $EXTRA_PROTECTED; do
+        [ "$branch" = "$p" ] && return 0
+    done
+    return 1
+}
+
+# detect protected branch
+# - pass "commit", "push", "del_branch" or "fin_branch"
+detect_protected_branch() {
+    local type_msg="${1:-}"
+    local current_branch="${2:-$working_branch}"
+
+    is_protected_branch "$current_branch" || return 0
+
+    case "$type_msg" in
+    del_branch)
+        err "you cannot delete protected branch '$current_branch'."
+        return 1
+        ;;
+    fin_branch)
+        err "you cannot finish protected branch '$current_branch'."
+        return 1
+        ;;
+    esac
+    flow_warn "'$current_branch' is a protected branch; you are about to $type_msg directly on it."
+}
+
 # check for staged files
 check_files_staged() {
     if git diff --cached --quiet --; then
-        printf '\nNo files are staged for commit.\n' >&2
+        info "No files are staged for commit."
         git status -sb
         if yes_no "Stage all tracked and untracked files now?" "y"; then
             git add -A
-            # check for staged files again to make sure fr
+            # check for staged files again to make sure
             if git diff --cached --quiet --; then
-                printf '\nAbort: working tree is clean. Nothing to stage.\n' >&2
+                err "working tree is clean. Nothing to stage."
                 return 1
             fi
         else
-            printf '\nCommit aborted.\n' >&2
+            info "Commit aborted."
             return 1
         fi
     fi
@@ -143,7 +210,7 @@ commit_message_check() {
 
     while :; do
         case "$REPLY" in
-            *[![:space:]]*) break ;;
+        *[![:space:]]*) break ;;
         esac
 
         if ! read -r -p "Enter a commit message: " REPLY; then
@@ -165,23 +232,27 @@ commit_pre_checks() {
 commit_function() {
     if [ "${1:-}" = "--amend" ]; then
         shift
-        commit_pre_checks "amend" "$@"
+        commit_pre_checks "amend" "$@" || return 1
         git commit --amend -m "$REPLY"
         return 0
     fi
-    commit_pre_checks "normal" "$@"
+    commit_pre_checks "normal" "$@" || return 1
     git commit -m "$REPLY"
+}
+
+remote_branch_exists() {
+    git ls-remote --exit-code --heads "$REMOTE" "$1" >/dev/null 2>&1
 }
 
 # rb-pull
 rb_pull_function() {
     local current="${1:-$working_branch}"
     if [ -z "$current" ]; then
-        printf '\nNot on a branch.\n' >&2
+        err "Not on a branch."
         return 1
     fi
-    
-    git switch "$current"
+
+    git switch "$current" || return 1
     # OLD manual stash logic to stash untracked
     # # Record old stash
     # old_stash=$(git rev-parse -q --verify refs/stash 2>/dev/null || :)
@@ -194,12 +265,12 @@ rb_pull_function() {
     #     git stash pop --index || return 1
     # fi
 
-    git pull --rebase --autostash origin "$current"
+    git pull --rebase --autostash "$REMOTE" "$current"
 }
 
 conditional_rb_pull() {
-    if git ls-remote --exit-code --heads origin "$working_branch" > /dev/null 2>&1; then
-        printf "\nBranch exists on remote. Syncing...\n" >&2
+    if remote_branch_exists "$working_branch"; then
+        info "Branch exists on remote. Syncing..."
         rb_pull_function "$working_branch"
     fi
 }

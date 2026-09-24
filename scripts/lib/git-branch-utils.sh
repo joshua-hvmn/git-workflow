@@ -12,154 +12,240 @@ if [ -n "${__BRANCH_UTILS_LOADED:-}" ]; then
 fi
 __BRANCH_UTILS_LOADED=1
 
-__CORE_UTILS_LOADED="${__CORE_UTILS_LOADED:-0}"
-
-if [ "$__CORE_UTILS_LOADED" -eq 0 ]; then
+if [ -z "$__CORE_UTILS_LOADED" ]; then
     . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+fi
+if [ -z "${__RELEASE_UTILS_LOADED:-}" ]; then
+    . "$GIT_SCRIPTS_HOME_DIR/lib/git-release-utils.sh"
 fi
 
 # FUNCTIONS
 
 check_clean_tree() {
     if [ -n "$(git ls-files --others --exclude-standard)" ]; then
-        printf "\nAbort: Working tree has files I can't autostash.\n"
+        err "working tree has files that autostash can't stash. Commit, stash -u, or ignore them firts."
         return 1
     fi
 }
+
 check_for_branch() {
     local target_branch="${1:-"next"}"
-    if ! git rev-parse --verify "$target_branch" >/dev/null 2>&1; then
-        printf "\nError: could not find local 'next' branch.\n" >&2
+    if ! git rev-parse --verify --quiet "refs/heads/$target_branch" >/dev/null; then
+        err "could not find local branch '$target_branch'."
         return 1
     fi
+}
+
+# Other release branches, local or remote (gitflow allows one at a time)
+other_release_branches() {
+    {
+        git for-each-ref --format='%(refname:short)' "refs/heads/${RELEASE_PREFIX}"
+        git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/${RELEASE_PREFIX}"
+    } | sort -u | grep -vxF "${1:-}" || true
 }
 
 start_branch() {
     local start_mode="${1:-}"
     local new_branch_name="${2:-"null"}"
     local new_branch_type="topic"
-    local base_branch="next"
-    local full_branch_name
-    local start_message="Enter new topic branch name: "
+    local base_branch="$DEV_BRANCH"
+    local prefix=""
+    local full_branch_name others
+    local start_message="Enter new topic branch name:"
 
-    
     if [ -z "$start_mode" ]; then
-        printf '\nError: usage: git b start <topic|hotfix|release> [branch-name]\n' >&2
+        err "usage: git b start <topic|hotfix|release> [branch-name]"
         return 1
     fi
 
-    check_clean_tree || return 1
-
-    git fetch --all --prune >/dev/null 2>&1 || true
-
-    check_for_branch "next"
-
     case "$start_mode" in
-        topic|t|-t|--topic)
-            :
-            ;;
-        hotfix|h|-h|--hotfix)
-            new_branch_type="hotfix"
-            base_branch="main"
-            start_message="Enter new hotfix name (e.g., v1.2.3): "
-            ;;
-        release|r|-r|--release)
-            new_branch_type="release"
-            start_message="Enter new release name (e.g., v1.2.3): "
-            ;;
-        *)
-            echo "ERROR: unknown mode: $start_mode"
-            return 1
-            ;;
+    topic | t | -t | --topic)
+        :
+        ;;
+    hotfix | h | -h | --hotfix)
+        new_branch_type="hotfix"
+        base_branch="$MAIN_BRANCH"
+        prefix="$HOTFIX_PREFIX"
+        start_message="Enter new hotfix name (e.g., v1.2.3):"
+        ;;
+    release | r | -r | --release)
+        new_branch_type="release"
+        prefix="$RELEASE_PREFIX"
+        start_message="Enter new release name (e.g., v1.2.3):"
+        ;;
+    *)
+        err "unknown mode: $start_mode"
+        return 1
+        ;;
     esac
 
-    get_user_input "$new_branch_name" "$start_message"
+    check_clean_tree || return 1
+    git fetch --all --prune >/dev/null 2>&1 || true
+    check_for_branch "$base_branch" || return 1
+
+    get_user_input "$new_branch_name" "$start_message" || return 1
     new_branch_name="$REPLY"
-    
+    full_branch_name="$prefix$new_branch_name"
+
     if [ "$new_branch_type" != "topic" ]; then
-        full_branch_name="$new_branch_type/$new_branch_name"
-    else
-        full_branch_name="$new_branch_name"
+        fetch_tags
+        validate_new_version "$new_branch_name" || return 1
     fi
 
-    printf "\nStarting %s branch '%s' from '%s'...\n" "$new_branch_type" "$full_branch_name" "$base_branch" >&2
+    if [ "$new_branch_type" = "release" ]; then
+        others=$(other_release_branches "$full_branch_name")
+        if [ -n "$others" ]; then
+            flow_warn "git flow allows one release branch at a time; already open: $(printf '%s' "$others" | tr '\n' ' ')" || return 1
+        fi
+    fi
+
+    if git rev-parse --verify --quiet "refs/heads/$full_branch_name" >/dev/null; then
+        err "branch '$full_branch_name' already exists."
+        return 1
+    fi
+
+    info "Starting $new_branch_type branch '$full_branch_name' from '$base_branch'..."
     rb_pull_function "$base_branch" || return 1
-    git switch -c "$full_branch_name" "$base_branch"
-    git push -u origin "$full_branch_name"
+    git switch -c "$full_branch_name" "$base_branch" || return 1
+    git push -u "$REMOTE" "$full_branch_name"
 }
 
 finish_branch() {
     local finish_choice="${1:-$working_branch}"
-    local finish_type
-    local finish_version
+    local finish_type=""
+    local finish_version=""
+    local push_refs
+
+    if [ -z "$finish_choice" ]; then
+        err "not on a branch; pass the branch to finish."
+        return 1
+    fi
 
     detect_protected_branch "fin_branch" "$finish_choice" || return 1
     check_clean_tree || return 1
+    check_for_branch "$finish_choice" || return 1
     git fetch --all --prune >/dev/null 2>&1 || true
-    check_for_branch "next"
+    check_for_branch "$MAIN_BRANCH" || return 1
+    check_for_branch "$DEV_BRANCH" || return 1
 
     case "$finish_choice" in
-        hotfix/*|release/*)
-            finish_type="${finish_choice%/*}"
-            finish_version="${finish_choice#*/}"
-            if ! yes_no "Merge '$finish_choice' into main and next, push changes and tag?"; then
-                return 1
-            fi
-            rb_pull_function "main"
-            git merge --no-ff "$finish_choice" || return 1
-            git tag -a "$finish_version" -m "$finish_type: $finish_version" || return 1
-            rb_pull_function "next" || return 1
-            if git merge --ff-only main 2>/dev/null; then
-                :
-            else
-                git merge --no-edit main || return 1
-            fi
-            git push origin main next --tags || return 1
-            delete_branch "$finish_choice" || return 1
-            ;;
-        *)
-            if ! yes_no "Merge '$finish_choice' into next, push changes?"; then
-                return 1
-            fi
-            rb_pull_function "next" || return 1
-            git merge --no-ff "$finish_choice" || return 1
-            git push origin next || return 1
-            delete_branch "$finish_choice" || return 1
-            ;;
+    "$RELEASE_PREFIX") finish_type="release" ;;
+    "$HOTFIX_PREFIX") finish_type="hotfix" ;;
     esac
+
+    if remote_branch_exists "$finish_choice"; then
+        rb_pull_function "$finish_choice" || return 1
+    fi
+
+    if [ -n "$finish_type" ]; then
+        finish_type=$(branch_version "$finish_choice")
+        fetch_tags
+        validate_new_version "$finish_version" || return 1
+
+        if [ -z "$(prerelease_tags_for "$finish_version")" ]; then
+            note "No prereleases were cut for $finish_version (git b pre). Releasing untested artifacts."
+        else
+            note "Prereleases for $finish_version: $(prerelease_tags_for "$finish_version" | tr '\n' ' ')"
+        fi
+
+        # Check for release branches and warn if on a hotfix and on Git Flow
+        if [ "$finish_type" = "hotfix" ] && [ "$TRUNK_MODE" -eq 0 ]; then
+            local open_releases
+            open_releases=$(other_release_branches "")
+            if [ -n "$open_releases" ]; then
+                warn "release branch(es) open: $(printf '%s' "$open_releases" | tr '\n' ' ')- git flow also merges hotfixes into them; do that manually after this."
+            fi
+        fi
+
+        if [ "$TRUNK_MODE" -eq 1 ]; then
+            yes_no "Merge '$finish_choice' into $MAIN_BRANCH, tag $finish_version, and push?" || return 1
+        else
+            yes_no "Merge '$finish_choice' into $MAIN_BRANCH and $DEV_BRANCH, tag $finish_version, and push?" || return 1
+        fi
+
+        rb_pull_function "$MAIN_BRANCH" || return 1
+        git merge --no-ff --no-edit -m "Merge $finish_type $finish_version" "$finish_choice" || return 1
+        git tag -a "$finish_version" -m "$finish_type: $finish_version" || return 1
+        push_refs="$MAIN_BRANCH"
+
+        # If Git Flow, back merge from main to dev
+        if [ "$TRUNK_MODE" -eq 0 ]; then
+            rb_pull_function "$DEV_BRANCH" || return 1
+            if ! git merge --ff-only "$MAIN_BRANCH" 2>/dev/null; then
+                git merge --no-edit "$MAIN_BRANCH" || {
+                    err "back-merge of $MAIN_BRANCH into $DEV_BRANCH failed. Resolve, commit, then run:"
+                    info " git push --atomic $REMOTE $MAIN_BRANCH $DEV_BRANCH refs/tags/$finish_version"
+                    return 1
+                }
+            fi
+            push_refs="$MAIN_BRANCH $DEV_BRANCH"
+        fi
+
+        git push --atomic "$REMOTE" "$push_refs" "refs/tags/$finish_version" | \ return 1
+    else
+        yes_no "Merge '$finish_choice' into $DEV_BRANCH and push?" || return 1
+        rb_pull_function "$DEV_BRANCH" || return 1
+        git merge --no-ff --no-edit "$finish_choice" || return 1
+        git push "$REMOTE" "$DEV_BRANCH" || return 1
+    fi
+
+    delete_branch "$finish_choice" || note "Kept branch '$finish_choice'."
 }
 
 delete_branch() {
     local delete_choice="${1:-$working_branch}"
     local force_mode="${2:-}"
-    local switched_branch=0
+    local return_to=""
 
     detect_protected_branch "del_branch" "$delete_choice" || return 1
     check_clean_tree || return 1
 
-    if [ "$delete_choice" = "$working_branch" ]; then
+    if [ "$(get_working_branch)" = "$working_branch" ]; then
         git switch next || {
-                printf '\nFailed to switch to next (does it exist?)\n'
-                return 1
-            }
-        switched_branch=1
+            err "failed to switch to $DEV_BRANCH (does it exist?)"
+            return 1
+        }
+        return_to="$delete_choice"
     fi
 
     case "$force_mode" in
-        yes|-y|--yes|--y|y|d|-d|--d|--delete)
-            printf '\nDeleting.\n' >&2
-            ;;
-        *)
-            if yes_no "Delete '$delete_choice' locally and remotely?"; then
-                printf '\nDeleting.\n' >&2
-            else
-                printf '\nDeletion aborted.\n' >&2
-                return 1
-            fi
-            ;;
+    yes | -y | --yes | --y | y | d | -d | --d | --delete)
+        info "Deleting."
+        ;;
+    *)
+        if ! yes_no "Delete '$delete_choice' locally and remotely?"; then
+            info "Deletion aborted."
+            [ -n "$return_to" ] && git switch "$return_to"
+            return 1
+        fi
+        ;;
     esac
 
-    git branch -d "$delete_choice"
-    git push origin --delete "$delete_choice" || printf 'Remote delete failed (maybe already gone)' >&2
-    printf "\nBranch $delete_choice deleted locally and remotely.\n"
+    local del_flag="-d"
+    git merge-base --is-ancestor "$delete_choice" HEAD 2>/dev/null && del_flag="-D"
+    git branch "$del_flag" "$delete_choice" || {
+        [ -n "$return_to" ] && git switch "$return_to"
+        return 1
+    }
+    if remote_branch_exists "$delete_choice"; then
+        git push "$REMOTE" --delete "$delete_choice" || warn "remote delete failed"
+    fi
+    info "Branch $delete_choice deleted."
+}
+
+show_config() {
+    local flow="git flow"
+    [ "$TRUNK_MODE" -eq 1 ] && flow="trunk / GitHub flow (devBranch = mainBranch)"
+    cat >&2 <<EOF
+git-workflow settings (git config workflow.<key>):
+  flow             $flow
+  mainBranch       $MAIN_BRANCH
+  devBranch        $DEV_BRANCH
+  remote           $REMOTE
+  releasePrefix    $RELEASE_PREFIX
+  hotfixPrefix     $HOTFIX_PREFIX
+  prereleaseLabel  $PRERELEASE_LABEL
+  strict           $STRICT
+  protected        $MAIN_BRANCH $DEV_BRANCH ${EXTRA_PROTECTED}
+EOF
 }

@@ -10,19 +10,13 @@ set -eu
 
 # Find script dir
 if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
-    script_path=${BASH_SOURCE[0]}
-    case $script_path in
-        */*) script_dir=${script_path%/*} ;;
-        *) script_dir=. ;;
-    esac
-    
-    GIT_SCRIPTS_HOME_DIR=$(cd "$script_dir" && pwd)
+    GIT_SCRIPTS_HOME_DIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
     export GIT_SCRIPTS_HOME_DIR
 fi
 # Source util script
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
 # MAIN
-printf 'Fetching all remotes and pruning dead branches...' >&2
+info "Fetching all remotes and pruning dead branches..."
 git fetch --all --prune
 rb_pull_function "$@"
