@@ -23,13 +23,13 @@ fi
 
 check_clean_tree() {
     if [ -n "$(git ls-files --others --exclude-standard)" ]; then
-        err "working tree has files that autostash can't stash. Commit, stash -u, or ignore them firts."
+        err "working tree has files that autostash can't stash. Commit, stash -u, or ignore them first."
         return 1
     fi
 }
 
 check_for_branch() {
-    local target_branch="${1:-"next"}"
+    local target_branch="${1:-$DEV_BRANCH}"
     if ! git rev-parse --verify --quiet "refs/heads/$target_branch" >/dev/null; then
         err "could not find local branch '$target_branch'."
         return 1
@@ -129,8 +129,8 @@ finish_branch() {
     check_for_branch "$DEV_BRANCH" || return 1
 
     case "$finish_choice" in
-    "$RELEASE_PREFIX") finish_type="release" ;;
-    "$HOTFIX_PREFIX") finish_type="hotfix" ;;
+    "$RELEASE_PREFIX"*) finish_type="release" ;;
+    "$HOTFIX_PREFIX"*) finish_type="hotfix" ;;
     esac
 
     if remote_branch_exists "$finish_choice"; then
@@ -138,7 +138,7 @@ finish_branch() {
     fi
 
     if [ -n "$finish_type" ]; then
-        finish_type=$(branch_version "$finish_choice")
+        finish_version=$(branch_version "$finish_choice")
         fetch_tags
         validate_new_version "$finish_version" || return 1
 
@@ -181,7 +181,9 @@ finish_branch() {
             push_refs="$MAIN_BRANCH $DEV_BRANCH"
         fi
 
-        git push --atomic "$REMOTE" "$push_refs" "refs/tags/$finish_version" | \ return 1
+        # push_refs must be unquoted
+        # shellcheck disable=SC2086
+        git push --atomic "$REMOTE" $push_refs "refs/tags/$finish_version" || return 1
     else
         yes_no "Merge '$finish_choice' into $DEV_BRANCH and push?" || return 1
         rb_pull_function "$DEV_BRANCH" || return 1
@@ -200,8 +202,8 @@ delete_branch() {
     detect_protected_branch "del_branch" "$delete_choice" || return 1
     check_clean_tree || return 1
 
-    if [ "$(get_working_branch)" = "$working_branch" ]; then
-        git switch next || {
+    if [ "$(get_working_branch)" = "$delete_choice" ]; then
+        git switch "$DEV_BRANCH" || {
             err "failed to switch to $DEV_BRANCH (does it exist?)"
             return 1
         }
