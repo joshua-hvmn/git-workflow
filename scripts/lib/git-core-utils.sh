@@ -42,7 +42,6 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
 #   git config --add workflow.protected staging   # extra protected branches (multi-valued)
 #
-# Loaded before the TEST_MODE mock below so config always comes from real git.
 # ---------------------------------------------------------------------------
 
 # Defaults, then one `git config` call reads every workflow.* key at once
@@ -88,11 +87,20 @@ get_working_branch() {
     git symbolic-ref --short HEAD 2>/dev/null || echo ''
 }
 
+working_branch=$(get_working_branch) || :
+
+require_branch() {
+    if [ -z "$working_branch" ]; then
+        err "not on a branch (detached HEAD). Switch to a branch first."
+        return 1
+    fi
+}
+
 get_user_input() {
     local user_input="${1:-}"
     local prompt_msg="${2:-}"
     REPLY=""
-    if [ -z "$user_input" ] || [ "$user_input" = "null" ]; then
+    if [ -z "$user_input" ]; then
         while true; do
             read -r -p "$prompt_msg " REPLY || return 1
             if [ -n "$REPLY" ]; then
@@ -104,19 +112,6 @@ get_user_input() {
         return 0
     fi
 }
-
-# Testing function
-# - run 'TEST_MODE=1 <script name> [args]'
-# - sets working branch
-: "${TEST_MODE:=0}"
-if [ "$TEST_MODE" -eq 1 ]; then
-    git() {
-        printf '%s\n' "[MOCK] git $*"
-    }
-    working_branch="dev"
-else
-    working_branch=$(get_working_branch) || :
-fi
 
 # yes or no
 yes_no() {
@@ -249,11 +244,15 @@ commit_pre_checks() {
 commit_function() {
     if [ "${1:-}" = "--amend" ]; then
         shift
-        commit_pre_checks "amend" "$@" || return 1
+        if [ "$#" -eq 0 ]; then
+            git commit --ammend --no-edit
+            return
+        fi
+        commit_pre_checks "amend" "$*" || return 1
         git commit --amend -m "$REPLY"
-        return 0
+        return
     fi
-    commit_pre_checks "normal" "$@" || return 1
+    commit_pre_checks "normal" "$*" || return 1
     git commit -m "$REPLY"
 }
 
@@ -292,17 +291,6 @@ rb_pull_function() {
     sync_remote
 
     git switch "$current" || return 1
-    # OLD manual stash logic to stash untracked
-    # # Record old stash
-    # old_stash=$(git rev-parse -q --verify refs/stash 2>/dev/null || :)
-    # git stash push -u -m "git-rb-pull autostash" || true
-    # # Record new stash
-    # new_stash=$(git rev-parse -q --verify refs/stash || echo "")
-    # git pull --rebase origin "$current"
-    # # Pop if necessary
-    # if [ "$old_stash" != "$new_stash" ]; then
-    #     git stash pop --index || return 1
-    # fi
 
     remote_branch_exists "$current" || return 0
 

@@ -8,6 +8,28 @@
 
 set -eu
 
+# Find script dir
+if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
+    GIT_SCRIPTS_HOME_DIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
+    export GIT_SCRIPTS_HOME_DIR
+fi
+# Source util script
+. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+
 # MAIN
-squash_against="${1:-$(git config --get workflow.devBranch || echo next)}"
-exec git rebase -i "$squash_against"
+# Squash the commits this branch adds on top of the dev branch. --keep-base
+# edits those commits in place without moving the branch onto a newer base, so
+# a squash never turns into a surprise conflict; `git sync` is for rebasing.
+detect_protected_branch "rewrite history"
+
+if [ "$#" -gt 0 ]; then
+    squash_against="$1"
+else
+    sync_remote
+    squash_against="$DEV_BRANCH"
+    # Prefer the fresh remote ref: a stale local dev branch would list commits
+    # that are already merged upstream.
+    remote_branch_exists "$DEV_BRANCH" && squash_against="$REMOTE/$DEV_BRANCH"
+fi
+
+exec git rebase -i --keep-base "$squash_against"
