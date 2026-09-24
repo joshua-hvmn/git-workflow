@@ -80,7 +80,7 @@ start_branch() {
     esac
 
     check_clean_tree || return 1
-    git fetch --all --prune >/dev/null 2>&1 || true
+    sync_remote
     check_for_branch "$base_branch" || return 1
 
     get_user_input "$new_branch_name" "$start_message" || return 1
@@ -88,7 +88,6 @@ start_branch() {
     full_branch_name="$prefix$new_branch_name"
 
     if [ "$new_branch_type" != "topic" ]; then
-        fetch_tags
         validate_new_version "$new_branch_name" || return 1
     fi
 
@@ -124,7 +123,7 @@ finish_branch() {
     detect_protected_branch "fin_branch" "$finish_choice" || return 1
     check_clean_tree || return 1
     check_for_branch "$finish_choice" || return 1
-    git fetch --all --prune >/dev/null 2>&1 || true
+    sync_remote
     check_for_branch "$MAIN_BRANCH" || return 1
     check_for_branch "$DEV_BRANCH" || return 1
 
@@ -133,13 +132,10 @@ finish_branch() {
     "$HOTFIX_PREFIX"*) finish_type="hotfix" ;;
     esac
 
-    if remote_branch_exists "$finish_choice"; then
-        rb_pull_function "$finish_choice" || return 1
-    fi
+    rb_pull_function "$finish_choice" || return 1
 
     if [ -n "$finish_type" ]; then
         finish_version=$(branch_version "$finish_choice")
-        fetch_tags
         validate_new_version "$finish_version" || return 1
 
         if [ -z "$(prerelease_tags_for "$finish_version")" ]; then

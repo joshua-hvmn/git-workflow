@@ -44,20 +44,37 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #
 # Loaded before the TEST_MODE mock below so config always comes from real git.
 # ---------------------------------------------------------------------------
-wf_config() {
-    local key="$1" default="${2:-}" value
-    value=$(git config --get "workflow.$key" 2>/dev/null) || value="$default"
-    printf '%s' "$value"
-}
 
-MAIN_BRANCH=$(wf_config mainBranch main)
-DEV_BRANCH=$(wf_config devBranch next)
-REMOTE=$(wf_config remote origin)
-RELEASE_PREFIX=$(wf_config releasePrefix release/)
-HOTFIX_PREFIX=$(wf_config hotfixPrefix hotfix/)
-PRERELEASE_LABEL=$(wf_config prereleaseLabel rc)
-STRICT=$(git config --type=bool --get workflow.strict 2>/dev/null) || STRICT=false
-EXTRA_PROTECTED=$(git config --get-all workflow.protected 2>/dev/null | tr '\n' ' ') || EXTRA_PROTECTED=''
+# Defaults, then one `git config` call reads every workflow.* key at once
+# (git prints keys lowercased, hence the lowercase patterns).
+MAIN_BRANCH=main
+DEV_BRANCH=next
+REMOTE=origin
+RELEASE_PREFIX=release/
+HOTFIX_PREFIX=hotfix/
+PRERELEASE_LABEL=rc
+STRICT=false
+EXTRA_PROTECTED=''
+
+while read -r __key __value; do
+    case "$__key" in
+    workflow.mainbranch) MAIN_BRANCH="$__value" ;;
+    workflow.devbranch) DEV_BRANCH="$__value" ;;
+    workflow.remote) REMOTE="$__value" ;;
+    workflow.releaseprefix) RELEASE_PREFIX="$__value" ;;
+    workflow.hotfixprefix) HOTFIX_PREFIX="$__value" ;;
+    workflow.prereleaselabel) PRERELEASE_LABEL="$__value" ;;
+    workflow.protected) EXTRA_PROTECTED="$EXTRA_PROTECTED $__value" ;;
+    workflow.strict)
+        # A bare `strict` with no value means true, same as git's own booleans
+        case "$__value" in
+        '' | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss] | [Oo][Nn] | 1) STRICT=true ;;
+        *) STRICT=false ;;
+        esac
+        ;;
+    esac
+done < <(git config --get-regexp '^workflow\.' 2>/dev/null || true)
+unset __key __value
 
 # GitHub / Trunk-based flow: no separate integration branch
 if [ "$DEV_BRANCH" = "$MAIN_BRANCH" ]; then
@@ -240,17 +257,39 @@ commit_function() {
     git commit -m "$REPLY"
 }
 
-remote_branch_exists() {
-    git ls-remote --exit-code --heads "$REMOTE" "$1" >/dev/null 2>&1
+# ---------------------------------------------------------------------------
+# Remote state
+#
+# Each fetch/ls-remote/pull/push is a separate SSH connection to the remote,
+# which is where nearly all the time goes. So: fetch once per command
+# (sync_remote), then answer every "does it exist on the remote?" question
+# from the local remote-tracking refs instead of asking the network again.
+# ---------------------------------------------------------------------------
+__SYNCED=0
+
+sync_remote() {
+    [ "$__SYNCED" -eq 1 ] && return 0
+    __SYNCED=1
+    # --tags also fetches all tags; --prune drops deleted remote branches
+    # (it does not delete local-only tags)
+    git fetch --quiet --prune --tags "$REMOTE" ||
+        warn "could not fetch from '$REMOTE'; using the last known remote state."
 }
 
-# rb-pull
+# Answered locally from refs/remotes/<remote>/*; call sync_remote first for fresh data.
+remote_branch_exists() {
+    git show-ref --verify --quiet "refs/remotes/$REMOTE/$1"
+}
+
+# rb-pull: switch to a branch and bring it up to date with the remote
 rb_pull_function() {
     local current="${1:-$working_branch}"
     if [ -z "$current" ]; then
         err "Not on a branch."
         return 1
     fi
+
+    sync_remote
 
     git switch "$current" || return 1
     # OLD manual stash logic to stash untracked
@@ -265,10 +304,23 @@ rb_pull_function() {
     #     git stash pop --index || return 1
     # fi
 
-    git pull --rebase --autostash "$REMOTE" "$current"
+    remote_branch_exists "$current" || return 0
+
+    if is_protected_branch "$current"; then
+        # main/next should never have local-only commits. A rebase here would
+        # flatten any unpushed merge commits (e.g. after a failed finish), so
+        # only fast-forward, and stop if the branch has diverged.
+        git merge --ff-only "$REMOTE/$current" || {
+            err "local '$current' has diverged from '$REMOTE/$current'; resolve it by hand."
+            return 1
+        }
+    else
+        git rebase --autostash "$REMOTE/$current"
+    fi
 }
 
 conditional_rb_pull() {
+    sync_remote
     if remote_branch_exists "$working_branch"; then
         info "Branch exists on remote. Syncing..."
         rb_pull_function "$working_branch"
