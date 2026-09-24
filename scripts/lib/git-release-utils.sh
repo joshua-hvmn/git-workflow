@@ -47,14 +47,9 @@ latest_stable_tag() {
     done
 }
 
+# Local check; remote tags are already here after sync_remote (fetch --tags).
 tag_exists() {
-    git rev-parse -q --verify "refs/tags/$1" >/dev/null 2>&1 ||
-        git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$1" >/dev/null 2>&1
-}
-
-fetch_tags() {
-    git fetch --quiet --tags "$REMOTE" 2>/dev/null ||
-        warn "could not fetch tags from '$REMOTE'; tag numbering uses local tags only."
+    git show-ref --verify --quiet "refs/tags/$1"
 }
 
 # release/v1.2.3 -> v1.2.3 (empty if the branch is not a release/hotfix branch)
@@ -125,7 +120,6 @@ ensure_branch_pushed() {
         return 0
     fi
 
-    git fetch --quiet "$REMOTE" "$branch" || return 1
     counts=$(git rev-list --left-right --count "HEAD...$REMOTE/$branch") || return 1
     ahead="${counts%%[[:space:]]*}"
     behind="${counts##*[[:space:]]}"
@@ -200,7 +194,7 @@ prerelease_branch() {
         base=""
     fi
 
-    fetch_tags
+    sync_remote
 
     if [ "$mode" = "list" ]; then
         if [ -z "$base" ]; then
