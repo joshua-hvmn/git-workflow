@@ -24,6 +24,7 @@ git clone <repo-url> git-workflow && cd git-workflow
 make install              # symlinks git-* into ~/.local/bin, includes the aliases in ~/.gitconfig
 make install PREFIX=/usr/local
 make uninstall
+git b version             # check what's installed
 ```
 
 Git runs any `git-<name>` executable on your `PATH` as `git <name>`. That is how tools like
@@ -65,7 +66,11 @@ The warnings below become hard stops when `workflow.strict=true`:
 - tagging with uncommitted changes, or with commits the remote branch doesn't have
 
 The following always stop: reusing an existing tag, prereleasing a version that already
-shipped, finishing or deleting a protected branch, and tagging a branch that is behind its remote.
+shipped, finishing or deleting a protected branch, tagging a branch that is behind its remote,
+and finishing (or deleting the current branch) with uncommitted changes.
+
+`git b pre -n` reports violations as warnings and never stops, so a dry run always shows
+what would happen.
 
 ## `git b`: branches and releases
 
@@ -77,6 +82,7 @@ shipped, finishing or deleting a protected branch, and tagging a branch that is 
 | `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |
 | `git b delete [branch] [-y]`                  | delete locally and on the remote                                      |
 | `git b config` / `git b help`                 | settings / usage                                                      |
+| `git b version`                               | installed version (from `VERSION`)                                    |
 
 ### start
 
@@ -84,7 +90,9 @@ shipped, finishing or deleting a protected branch, and tagging a branch that is 
 - **release**: `release/vX.Y.Z` from `devBranch` (version validated against existing tags)
 - **hotfix**: `hotfix/vX.Y.Z` from `mainBranch`
 
-Aborts if the tree has untracked files (autostash can't carry them).
+Aborts if the tree has untracked files (autostash can't carry them). Tracked edits come along
+to the new branch, the same as `git switch -c`. On a fresh clone, a missing local `main` or
+`devBranch` is created from the remote automatically.
 
 ### prerelease: test the release pipeline before `main`
 
@@ -96,7 +104,7 @@ git b pre              # tags v1.2.0-rc.1 and pushes it → CI publishes a GitHu
 git b pre              # v1.2.0-rc.2 (numbering continues from existing local + remote tags)
 git b pre beta         # v1.2.0-beta.1
 git b pre v1.2.0-rc.9  # exact tag
-git b pre -n           # dry run: show what would be tagged
+git b pre -n           # dry run: show what would be tagged (warns, never prompts)
 git b pre -l           # list prereleases for this version
 git b finish           # v1.2.0 on main
 ```
@@ -114,9 +122,17 @@ Delete a bad prerelease with `gh release delete v1.2.0-rc.1 --cleanup-tag`.
   `git push --atomic` of the branches **and only that tag**. Lists the prereleases that were
   cut, and flags when there were none.
 
+Refuses to start with uncommitted changes, since it switches branches and git would carry
+them onto `devBranch`.
+
 `--atomic` means the remote gets everything or nothing. Pushing one explicit tag, not
 `--tags`, keeps stray local tags off the remote, and GitHub skips workflow runs when more
 than three tags arrive in a single push.
+
+If the push is rejected (a hook, a race, a dropped connection), nothing was published but the
+merge and tag exist locally. finish prints the exact command to retry the push, and offers to
+roll back instead: it deletes the tag, resets `mainBranch`/`devBranch` to where they were, and
+puts you back on the release branch so you can fix the cause and run `git b finish` again.
 
 ### delete
 
@@ -126,14 +142,26 @@ you were on.
 
 ## Other commands
 
-| Command                     | Description                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `git c [--amend] [message]` | commit; offers `git add -A` if nothing is staged, prompts for a message         |
-| `git qc [p] [message]`      | protected-branch check, sync with the remote, commit, and optionally push (`p`) |
-| `git ps [force]`            | `push -u` to the remote (after syncing); `force` → `--force-with-lease`         |
-| `git sync [branch]`         | `fetch --all --prune`, then `pull --rebase --autostash`                         |
-| `git rb-pull [branch]`      | `pull --rebase --autostash` for a branch                                        |
-| `git sq [base]`             | interactive rebase onto `devBranch` to squash                                   |
+| Command                     | Description                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `git c [--amend] [message]` | commit; offers `git add -A` if nothing is staged. `--amend` alone keeps the message  |
+| `git qc [p] [message]`      | protected-branch check, commit, rebase onto the remote branch, optionally push (`p`) |
+| `git ps [force]`            | sync with the remote, then `push -u`; `force` → `--force-with-lease`                 |
+| `git sync [branch]`         | `fetch --all --prune --tags`, then bring the branch up to date (see below)           |
+| `git rb-pull [branch]`      | switch to a branch and bring it up to date with the remote                           |
+| `git sq [base]`             | interactive `rebase --keep-base` to squash the branch's own commits                  |
+
+Messages don't need quotes: `git c fix the bug` commits "fix the bug".
+
+"Up to date" means: protected branches (`main`, `devBranch`) are fast-forwarded only and the
+command stops if they've diverged, so unpushed merge commits are never flattened. Other
+branches are rebased onto their remote with `--autostash`.
+
+`git qc` commits _before_ syncing. Syncing first would autostash, and git restores an
+autostash without the staged/unstaged split, so a partial `git add` would be lost.
+
+`git sq` defaults to `<remote>/<devBranch>` and uses `--keep-base`, so it only rewrites your
+commits and never moves the branch onto a newer base (that's what `git sync` is for).
 
 ## Aliases
 
@@ -142,6 +170,20 @@ you were on.
 
 ## CI pairing
 
-Designed to feed a tag-triggered release workflow (see wg-vpn's `.github/workflows/release.yml`):
-tags containing `-` publish as GitHub prereleases from any branch, and plain `vX.Y.Z` tags
-are rejected unless the commit is on `main`.
+Designed to feed a tag-triggered release workflow. This repo releases itself with one,
+[`.github/workflows/release.yml`](.github/workflows/release.yml); copy it and change the build step:
+
+- tags containing `-` publish as GitHub prereleases from any branch
+- plain `vX.Y.Z` tags are rejected unless the commit is on `main`
+- the tag's version must match the `VERSION` file, so bump it on the release branch before `git b pre`
+
+## Development
+
+```sh
+make lint    # shellcheck
+make test    # bats suite (needs bats-core: apt install bats / brew install bats-core)
+```
+
+Tests run each command against a throwaway bare remote and clone, with your global git config
+isolated. `tests/regressions.bats` has one test per fixed bug; `tests/flows.bats` covers the
+full flows and guardrails. CI runs both on every push to a flow branch and on pull requests.

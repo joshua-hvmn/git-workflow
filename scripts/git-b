@@ -29,6 +29,7 @@ usage: git b [<subcommand>] [args]
   delete [branch] [-y]                  delete a branch locally and on the remote
   config                                show the effective workflow settings
   help                                  this message
+  version                               show the git-workflow version
 
 Anything else is passed to 'git branch' (e.g. 'git b -a', 'git b -vv').
 EOF
@@ -55,6 +56,10 @@ config)
     ;;
 help | --help | -h)
     b_usage
+    ;;
+version | --version | -V)
+    # VERSION sits at the repo root, one level above scripts/
+    printf 'git-workflow %s\n' "$(cat "$GIT_SCRIPTS_HOME_DIR/../VERSION" 2>/dev/null || echo unknown)"
     ;;
 *)
     exec git branch "$B_SUBCMD" "$@"

@@ -1,0 +1,4 @@
+# Keep release tarballs (git archive) to what users install
+.github/ export-ignore
+tests/ export-ignore
+.gitattributes export-ignore

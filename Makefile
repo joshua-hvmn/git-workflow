@@ -4,7 +4,7 @@ SRCDIR  := $(abspath scripts)
 ALIASES := $(abspath alias-core/git-workflow-aliases)
 SCRIPTS := $(notdir $(wildcard scripts/git-*))
 
-.PHONY: install uninstall lint
+.PHONY: install uninstall lint test
 
 ## install: symlink the git-* commands into $(BINDIR) and include the aliases in ~/.gitconfig
 install:
@@ -24,3 +24,8 @@ uninstall:
 ## lint: shellcheck every script
 lint:
 	cd scripts && shellcheck -x -P lib -e SC1091 git-* lib/*.sh
+
+
+## test: run the bats suite (needs bats-core)
+test:
+	BATS_TEST_TIMEOUT=60 bats tests </dev/null

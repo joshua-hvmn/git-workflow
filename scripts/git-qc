@@ -30,10 +30,11 @@ p)
     ;;
 esac
 
+[ "$QC_MODE" = "p" ] && require_branch
 detect_protected_branch "commit"
-conditional_rb_pull
 commit_function "$@"
+conditional_rb_pull
 
 if [ "$QC_MODE" = "p" ]; then
-    git push -u origin "$working_branch"
+    git push -u "$REMOTE" "$working_branch"
 fi

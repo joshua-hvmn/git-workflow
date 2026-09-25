@@ -16,6 +16,7 @@ fi
 # Source util script
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
+require_branch
 PS_MODE="${1:-}"
 case "$PS_MODE" in
 force | -F | --force-with-lease)
@@ -35,10 +36,10 @@ case $PS_MODE in
 default)
     detect_protected_branch "push"
     conditional_rb_pull
-    git push -u origin "$working_branch"
+    git push -u "$REMOTE" "$working_branch"
     ;;
 force)
     detect_protected_branch "push"
-    git push --force-with-lease origin "$working_branch"
+    git push --force-with-lease "$REMOTE" "$working_branch"
     ;;
 esac
