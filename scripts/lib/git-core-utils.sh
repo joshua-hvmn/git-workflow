@@ -245,7 +245,7 @@ commit_function() {
     if [ "${1:-}" = "--amend" ]; then
         shift
         if [ "$#" -eq 0 ]; then
-            git commit --ammend --no-edit
+            git commit --amend --no-edit
             return
         fi
         commit_pre_checks "amend" "$*" || return 1
