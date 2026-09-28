@@ -124,6 +124,27 @@ start_branch() {
     git push -u "$REMOTE" "$full_branch_name"
 }
 
+# finish_rollback <branch> [tag] [main_before] [dev_before]
+# Abort a half done merge, delete created tag, reset main and dev to where they were and go back
+# to <branch>. Only local refs are touched
+finish_rollback() {
+    local branch="$1" tag="${2:-}" main_before="${3:-}" dev_before="${4:-}"
+
+    if git rev-parse --verify --quiet MERGE_HEAD >/dev/null; then
+        git merge --abort || return 1
+    fi
+    git switch --quiet "$branch" || return 1
+    if [ -n "$tag" ]; then
+        git tag -d "$tag" >/dev/null || return 1
+    fi
+    if [ -n "$main_before" ]; then
+        git branch -f "$MAIN_BRANCH" "$main_before" || return 1
+    fi
+    if [ -n "$dev_before" ]; then
+        git branch -f "$DEV_BRANCH" "$dev_before" || return 1
+    fi
+}
+
 finish_push_failed() {
     local branch="$1" version="$2" refs="$3" main_before="$4" dev_before="${5:-}"
 
@@ -132,100 +153,170 @@ finish_push_failed() {
     info "  git push --atomic $REMOTE $refs refs/tags/$version && git b delete $branch"
 
     if yes_no "Roll back the local merge and tag instead (then fix the cause and run 'git b finish' again)?"; then
-        git switch --quiet "$branch" || return 1
-        git tag -d "$version" >/dev/null || return 1
-        git branch -f "$MAIN_BRANCH" "$main_before" || return 1
-        if [ -n "$dev_before" ]; then
-            git branch -f "$DEV_BRANCH" "$dev_before" || return 1
-        fi
+        finish_rollback "$branch" "$version" "$main_before" "$dev_before" || return 1
         info "Rolled back. You are on '$branch' again."
     fi
 }
 
-finish_branch() {
-    local finish_choice="${1:-$working_branch}"
-    local finish_type=""
-    local finish_version=""
-    local push_refs main_before="" dev_before=""
+# Topic branches with workflow.finishTopic=pr: publish and open a pull request
+# instead of merging locally (for repos where devBranch requires reviews).
+finish_topic_pr() {
+    local branch="$1" url
 
-    if [ -z "$finish_choice" ]; then
+    if ! command -v gh >/dev/null 2>&1; then
+        err "workflow.finishTopic is 'pr', but the GitHub CLI (gh) isn't installed."
+        return 1
+    fi
+    git push -u "$REMOTE" "$branch" || return 1
+    if url=$(gh pr view "$branch" --json url --jq .url 2>/dev/null) && [ -n "$url" ]; then
+        note "A pull request for '$branch' is already open: $url"
+        return 0
+    fi
+    yes_no "Open a pull request from '$branch' into '$DEV_BRANCH'?" "y" || return 1
+    gh pr create --base "$DEV_BRANCH" --head "$branch" --fill
+}
+
+finish_topic() {
+    local branch="$1" dev_before
+
+    if [ "$FINISH_TOPIC" = pr ]; then
+        finish_topic_pr "$branch"
+        return
+    fi
+
+    yes_no "Merge '$branch' into $DEV_BRANCH and push?" || return 1
+
+    if ! rb_pull_function "$DEV_BRANCH"; then
+        git switch --quiet "$branch" 2>/dev/null || :
+        return 1
+    fi
+    dev_before=$(git rev-parse "$DEV_BRANCH")
+
+    if ! git merge --no-ff --no-edit "$branch"; then
+        err "merging '$branch' into '$DEV_BRANCH' conflicted."
+        finish_rollback "$branch" "" "" "$dev_before" || return 1
+        info "Rolled back; you are on '$branch'. Bring in the latest '$DEV_BRANCH'"
+        info "(git merge $REMOTE/$DEV_BRANCH), resolve the conflicts there, then run 'git b finish' again."
+        return 1
+    fi
+
+    if ! git push "$REMOTE" "$DEV_BRANCH"; then
+        err "push to '$REMOTE' was rejected; nothing was published."
+        finish_rollback "$branch" "" "" "$dev_before" || return 1
+        info "Rolled back; you are on '$branch'. If someone pushed to '$DEV_BRANCH first, run 'git b finish' again."
+        info "If '$DEV_BRANCH' only accepts pull requests: git config workflow.finishTopic pr"
+        return 1
+    fi
+
+    delete_branch "$branch" || note "Kept branch '$branch'."
+}
+
+finish_release() {
+    local branch="$1" type="$2"
+    local version push_refs open_releases main_before="" dev_before=""
+
+    version=$(branch_version "$branch")
+    validate_new_version "$version" || return 1
+
+    if [ -z "$(prerelease_tags_for "$version")" ]; then
+        note "No prereleases were cut for $version (git b pre). Releasing untested artifacts."
+    else
+        note "Prereleases for $version: $(prerelease_tags_for "$version" | tr '\n' ' ')"
+    fi
+
+    if [ "$type" = "hotfix" ] && [ "$TRUNK_MODE" -eq 0 ]; then
+        open_releases=$(other_release_branches "")
+        if [ -n "$open_releases" ]; then
+            warn "releas branch(es) open: $(printf '%s' "$open_releases" | tr '\n' ' ')- git flow also merges hotfixes into them; do that manually after this."
+        fi
+    fi
+
+    if [ "$TRUNK_MODE" -eq 1 ]; then
+        yes_no "Merge '$branch' into $MAIN_BRANCH, tag $version, and push?" || return 1
+    else
+        yes_no "Merge '$branch' into $MAIN_BRANCH and $DEV_BRANCH, tag $version, and push?" || return 1
+    fi
+
+    if ! rb_pull_function "$MAIN_BRANCH"; then
+        git switch --quiet "$branch" 2>/dev/null || :
+        return 1
+    fi
+    main_before=$(git rev-parse "$MAIN_BRANCH")
+    if ! git merge --no-ff --no-edit -m "Merge $type $version" "$branch"; then
+        err "merging '$branch' into '$MAIN_BRANCH' conflicted."
+        finish_rollback "$branch" "" "$main_before" || return 1
+        info "Rolled back; you are on '$branch'. Bring in the latest '$MAIN_BRANCH'"
+        info "(git merge $REMOTE/$MAIN_BRANCH), resolve the conflicts there, then run 'git b finish' again."
+        return 1
+    fi
+    if ! git tag -a "$version" -m "$type: $version"; then
+        finish_rollback "$branch" "" "$main_before" || return 1
+        return 1
+    fi
+    push_refs="$MAIN_BRANCH"
+
+    # git flow: back-merge main into devBranch so the release (and its tag) are on it
+    if [ "$TRUNK_MODE" -eq 0 ]; then
+        if ! rb_pull_function "$DEV_BRANCH"; then
+            finish_rollback "$branch" "$version" "$main_before" || return 1
+            info "Rolled back; you are on '$branch'. Fix '$DEV_BRANCH' (see above), then run 'git b finish' again."
+
+            return 1
+        fi
+        dev_before=$(git rev-parse "$DEV_BRANCH")
+
+        if ! git merge --ff-only "$MAIN_BRANCH" 2>/dev/null && ! git merge --no-edit "$MAIN_BRANCH"; then
+            err "back-merge of $MAIN_BRANCH into $DEV_BRANCH conflicted."
+            if yes_no "Roll back the release merge and tag (then fix the cause and run 'git b finish' again)?"; then
+                finish_rollback "$branch" "$version" "$main_before" "$dev_before" || return 1
+                info "Rolled back. You are on '$branch' again."
+            else
+                info "Resolve the conflicts on $DEV_BRANCH and commit, then publish with:"
+                info "  git push --atomic $REMOTE $MAIN_BRANCH $DEV_BRANCH refs/tags/$version && git b delete $branch"
+            fi
+            return 1
+        fi
+        push_refs="$MAIN_BRANCH $DEV_BRANCH"
+    fi
+
+    # push_refs must be unquoted
+    # shellcheck disable=SC2086
+    if ! git push --atomic "$REMOTE" $push_refs "refs/tags/$version"; then
+        finish_push_failed "$branch" "$version" "$push_refs" "$main_before" "$dev_before"
+        return 1
+    fi
+
+    delete_branch "$branch" || note "Kept branch '$branch'."
+}
+
++finish_branch() {
+    local branch="${1:-$working_branch}"
+    local type="topic"
+
+    if [ -z "$branch" ]; then
         err "not on a branch; pass the branch to finish."
         return 1
     fi
 
-    detect_protected_branch "fin_branch" "$finish_choice" || return 1
+    detect_protected_branch "fin_branch" "$branch" || return 1
     require_clean_tree || return 1
     sync_remote
-    check_for_branch "$finish_choice" || return 1
+    check_for_branch "$branch" || return 1
     check_for_branch "$MAIN_BRANCH" || return 1
     check_for_branch "$DEV_BRANCH" || return 1
 
-    case "$finish_choice" in
-    "$RELEASE_PREFIX"*) finish_type="release" ;;
-    "$HOTFIX_PREFIX"*) finish_type="hotfix" ;;
+    case "$branch" in
+    "$RELEASE_PREFIX"*) type="release" ;;
+    "$HOTFIX_PREFIX"*) type="hotfix" ;;
     esac
 
-    rb_pull_function "$finish_choice" || return 1
+    rb_pull_function "$branch" || return 1
 
-    if [ -n "$finish_type" ]; then
-        finish_version=$(branch_version "$finish_choice")
-        validate_new_version "$finish_version" || return 1
-
-        if [ -z "$(prerelease_tags_for "$finish_version")" ]; then
-            note "No prereleases were cut for $finish_version (git b pre). Releasing untested artifacts."
-        else
-            note "Prereleases for $finish_version: $(prerelease_tags_for "$finish_version" | tr '\n' ' ')"
-        fi
-
-        # Check for release branches and warn if on a hotfix and on Git Flow
-        if [ "$finish_type" = "hotfix" ] && [ "$TRUNK_MODE" -eq 0 ]; then
-            local open_releases
-            open_releases=$(other_release_branches "")
-            if [ -n "$open_releases" ]; then
-                warn "release branch(es) open: $(printf '%s' "$open_releases" | tr '\n' ' ')- git flow also merges hotfixes into them; do that manually after this."
-            fi
-        fi
-
-        if [ "$TRUNK_MODE" -eq 1 ]; then
-            yes_no "Merge '$finish_choice' into $MAIN_BRANCH, tag $finish_version, and push?" || return 1
-        else
-            yes_no "Merge '$finish_choice' into $MAIN_BRANCH and $DEV_BRANCH, tag $finish_version, and push?" || return 1
-        fi
-
-        rb_pull_function "$MAIN_BRANCH" || return 1
-        main_before=$(git rev-parse "$MAIN_BRANCH")
-        git merge --no-ff --no-edit -m "Merge $finish_type $finish_version" "$finish_choice" || return 1
-        git tag -a "$finish_version" -m "$finish_type: $finish_version" || return 1
-        push_refs="$MAIN_BRANCH"
-
-        # If Git Flow, back merge from main to dev
-        if [ "$TRUNK_MODE" -eq 0 ]; then
-            rb_pull_function "$DEV_BRANCH" || return 1
-            dev_before=$(git rev-parse "$DEV_BRANCH")
-            if ! git merge --ff-only "$MAIN_BRANCH" 2>/dev/null; then
-                git merge --no-edit "$MAIN_BRANCH" || {
-                    err "back-merge of $MAIN_BRANCH into $DEV_BRANCH failed. Resolve, commit, then run:"
-                    info " git push --atomic $REMOTE $MAIN_BRANCH $DEV_BRANCH refs/tags/$finish_version"
-                    return 1
-                }
-            fi
-            push_refs="$MAIN_BRANCH $DEV_BRANCH"
-        fi
-
-        # push_refs must be unquoted
-        # shellcheck disable=SC2086
-        if ! git push --atomic "$REMOTE" $push_refs "refs/tags/$finish_version"; then
-            finish_push_failed "$finish_choice" "$finish_version" "$push_refs" "$main_before" "$dev_before"
-            return 1
-        fi
+    if [ "$type" = "topic" ]; then
+        finish_topic "$branch"
     else
-        yes_no "Merge '$finish_choice' into $DEV_BRANCH and push?" || return 1
-        rb_pull_function "$DEV_BRANCH" || return 1
-        git merge --no-ff --no-edit "$finish_choice" || return 1
-        git push "$REMOTE" "$DEV_BRANCH" || return 1
+        finish_release "$branch" "$type"
     fi
-
-    delete_branch "$finish_choice" || note "Kept branch '$finish_choice'."
 }
 
 delete_branch() {
@@ -282,6 +373,7 @@ git-workflow settings (git config workflow.<key>):
   hotfixPrefix     $HOTFIX_PREFIX
   prereleaseLabel  $PRERELEASE_LABEL
   strict           $STRICT
+  finishTopic      $FINISH_TOPIC
   protected        $MAIN_BRANCH $DEV_BRANCH ${EXTRA_PROTECTED}
 EOF
 }

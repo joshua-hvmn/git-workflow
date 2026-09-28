@@ -90,3 +90,29 @@ no_local_branch() {
 not_ancestor() {
     ! git merge-base --is-ancestor "$1" "$2"
 }
+
+no_merge_in_progress() {
+    ! git rev-parse --verify --quiet MERGE_HEAD >/dev/null
+}
+
+# Put a fake `gh` first on PATH. `gh pr view` prints $1 (an existing PR's URL)
+# or fails when no URL is given; every other call is logged to $GH_LOG.
+fake_gh() {
+    local bin="$BATS_TEST_TMPDIR/bin"
+    GH_LOG="$BATS_TEST_TMPDIR/gh.log"
+    : >"$GH_LOG"
+    mkdir -p "$bin"
+    {
+        echo '#!/bin/sh'
+        echo 'if [ "$1 $2" = "pr view" ]; then'
+        if [ -n "${1:-}" ]; then
+            echo "    echo '$1'; exit 0"
+        else
+            echo '    exit 1'
+        fi
+        echo 'fi'
+        echo "echo \"\$*\" >>'$GH_LOG'"
+    } >"$bin/gh"
+    chmod +x "$bin/gh"
+    export PATH="$bin:$PATH" GH_LOG
+}

@@ -40,6 +40,7 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #   git config workflow.hotfixPrefix    hotfix/
 #   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
+#   git config workflow.finishTopic     merge     # merge | pr (open a pull request with gh instead)
 #   git config --add workflow.protected staging   # extra protected branches (multi-valued)
 #
 # ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ RELEASE_PREFIX=release/
 HOTFIX_PREFIX=hotfix/
 PRERELEASE_LABEL=rc
 STRICT=false
+FINISH_TOPIC=merge
 EXTRA_PROTECTED=''
 
 while read -r __key __value; do
@@ -64,6 +66,7 @@ while read -r __key __value; do
     workflow.hotfixprefix) HOTFIX_PREFIX="$__value" ;;
     workflow.prereleaselabel) PRERELEASE_LABEL="$__value" ;;
     workflow.protected) EXTRA_PROTECTED="$EXTRA_PROTECTED $__value" ;;
+    workflow.finishtopic) FINISH_TOPIC="$__value" ;;
     workflow.strict)
         # A bare `strict` with no value means true, same as git's own booleans
         case "$__value" in
@@ -74,6 +77,14 @@ while read -r __key __value; do
     esac
 done < <(git config --get-regexp '^workflow\.' 2>/dev/null || true)
 unset __key __value
+
+case "$FINISH_TOPIC" in
+merge | pr) ;;
+*)
+    warn "workflow.finishTopic must be 'merge' or 'pr', not '$FINISH_TOPIC'; using 'merge'."
+    FINISH_TOPIC=merge
+    ;;
+esac
 
 # GitHub / Trunk-based flow: no separate integration branch
 if [ "$DEV_BRANCH" = "$MAIN_BRANCH" ]; then

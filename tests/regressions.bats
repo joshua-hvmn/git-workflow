@@ -1,7 +1,10 @@
 #!/usr/bin/env bats
-# One test per bug fixed in v1.3.0. Each failed against v1.2.2.
+# One test per fixed bug, grouped by the release that fixed it.
+# Each one fails against the release before it.
 
 load test_helper
+
+# --- v1.3.0 ------------------------------------------------------------------
 
 @test "qc: partially staged changes stay partial (commit before sync)" {
     git switch -qc feat
@@ -206,4 +209,89 @@ load test_helper
     run git b version
     [ "$status" -eq 0 ]
     [ "$output" = "git-workflow $(cat "$REPO_ROOT/VERSION")" ]
+}
+
+# --- v1.4.0 ------------------------------------------------------------------
+
+@test "finish topic: a rejected push rolls back, and finish can simply rerun" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    reject_pushes
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Rolled back"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+
+    allow_pushes
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    git fetch -q --prune origin
+    [ "$(git log -1 --format=%s origin/next)" = "Merge branch 'foo' into next" ]
+}
+
+@test "finish topic: a merge conflict is aborted and rolled back" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    remote_commit next a # conflicting change on next
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"conflicted"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+    no_merge_in_progress
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+}
+
+@test "finish release: a merge conflict with main is aborted and rolled back" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    remote_commit main a # conflicting change on main
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    no_merge_in_progress
+}
+
+@test "finish release: a diverged local next rolls back the merge and tag" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    git switch -q next
+    commit_change b "local only"
+    git switch -q release/v1.1.0
+    remote_commit next b
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"diverged"* ]]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    # the unpushed commit on next is untouched
+    [ "$(git log -1 --format=%s next)" = "local only" ]
+}
+
+@test "finish release: a back-merge conflict can be rolled back" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    remote_commit next a # next changed the same lines after the release branched
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"back-merge"* ]]
+    [[ "$output" == *"Rolled back"* ]]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+    no_merge_in_progress
 }
