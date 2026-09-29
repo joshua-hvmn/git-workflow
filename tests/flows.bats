@@ -149,6 +149,30 @@ load test_helper
     [ "$(git rev-parse next)" = "$before" ]
 }
 
+@test "ps: still rebases onto commits someone else pushed" {
+    git switch -qc feat
+    commit_change a mine
+    git push -qu origin feat
+    remote_commit feat b
+    commit_change a "mine too"
+
+    run git ps
+    [ "$status" -eq 0 ]
+    [ "$(git log -1 --format=%s origin/feat)" = "mine too" ]
+    [ "$(git log -1 --format=%s origin/feat~1)" = "upstream change on feat" ]
+}
+
+@test "sq: after squashing pushed commits it says how to publish" {
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+
+    GIT_SEQUENCE_EDITOR=$(squash_editor) run git sq
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"git ps force"* ]]
+}
+
 @test "strict: committing on a protected branch aborts" {
     git config workflow.strict true
     echo x >>a

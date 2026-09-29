@@ -176,7 +176,7 @@ load test_helper
     git fetch -q origin
     git branch -f next origin/next
 
-    GIT_SEQUENCE_EDITOR="sed -i '2,\$s/^pick/fixup/'" run git sq
+    GIT_SEQUENCE_EDITOR=$(squash_editor) run git sq
     [ "$status" -eq 0 ]
     [ "$(git merge-base HEAD origin/next)" = "$base" ]
     [ "$(git rev-list --count "$base"..HEAD)" -eq 1 ]
@@ -294,4 +294,96 @@ load test_helper
     [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
     [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
     no_merge_in_progress
+}
+
+@test "c: commits on a protected branch get the same guardrail as qc" {
+    git config workflow.strict true
+    echo x >>a
+    git add a
+    run git c on main
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"workflow.strict"* ]]
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+}
+
+@test "c: a git-commit flag is rejected instead of becoming the message" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    run git c -m "fix the bug"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unknown option '-m'"* ]]
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+}
+
+@test "c: -- allows a message that starts with a dash" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    git c -- -x flag removed
+    [ "$(git log -1 --format=%s)" = "-x flag removed" ]
+}
+
+@test "qc: the word 'push' starts the message instead of selecting push mode" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    run git qc push notifications for alerts
+    [ "$status" -eq 0 ]
+    [ "$(git log -1 --format=%s)" = "push notifications for alerts" ]
+    remote_lacks_ref refs/heads/feat
+}
+
+@test "ps force: never force-pushes a protected branch, strict or not" {
+    run git ps force </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"refusing to force-push"* ]]
+}
+
+@test "ps force: won't overwrite commits it only saw through a background fetch" {
+    git switch -qc feat
+    commit_change a "mine"
+    git push -qu origin feat
+    remote_commit feat b # someone else pushes
+    git fetch -q origin  # an editor's background fetch picks it up
+    git commit -q --amend -m "mine, amended"
+
+    run git ps force
+    [ "$status" -ne 0 ]
+    git fetch -q origin
+    [ "$(git log -1 --format=%s origin/feat)" = "upstream change on feat" ]
+}
+
+@test "ps: after a squash it says to force-push instead of replaying old commits" {
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+    git reset -q --soft origin/main
+    git commit -qm squashed
+
+    run git ps
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git ps force"* ]]
+    [ "$(git log -1 --format=%s)" = "squashed" ]
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 1 ]
+
+    run git ps force
+    [ "$status" -eq 0 ]
+    [ "$(git rev-parse origin/feat)" = "$(git rev-parse HEAD)" ]
+}
+
+@test "sq: a hotfix squashes against main, not the dev branch" {
+    local_next
+    remote_commit main b # a commit on main that next doesn't have
+    git b start hotfix v1.0.1 >/dev/null 2>&1
+    commit_change a c1
+    commit_change a c2
+
+    GIT_SEQUENCE_EDITOR=$(squash_editor) run git sq
+    [ "$status" -eq 0 ]
+    git merge-base --is-ancestor origin/main HEAD
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 1 ]
+    # the squashed commits were never pushed, so no force-push is needed
+    [[ "$output" != *"git ps force"* ]]
 }

@@ -16,17 +16,11 @@ fi
 # Source util script
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
-QC_MODE="${1:-}"
-case "$QC_MODE" in
-p)
-    shift
-    ;;
--p | push)
+QC_MODE=""
+case "${1:-}" in
+p | -p | --push)
     QC_MODE="p"
     shift
-    ;;
-*)
-    QC_MODE=""
     ;;
 esac
 

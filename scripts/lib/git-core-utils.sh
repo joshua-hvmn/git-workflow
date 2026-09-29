@@ -251,10 +251,31 @@ commit_pre_checks() {
     fi
     commit_message_check "$@" || return 1
 }
-# commit function, call this in quick commit
+# commit_function [--amend] [--] [message words...]
+# The message is plain words, so anything else starting with "-" is almost
+# certainly a `git commit` flag typed from habit: `git c -m "fix"` would
+# otherwise commit the message "-m fix". Put -- before a message that really
+# starts with a dash.
 commit_function() {
+    local amend=""
+
     if [ "${1:-}" = "--amend" ]; then
+        amend=1
         shift
+    fi
+    if [ "${1:-}" = "--" ]; then
+        shift
+    else
+        case "${1:-}" in
+        -*)
+            err "unknown option '$1'. The message is plain words: git c fix the bug, or git qc 'fix the bug'"
+            info "(use --): git c [--amend] -- $1"
+            return 1
+            ;;
+        esac
+    fi
+
+    if [ -n "$amend" ]; then
         if [ "$#" -eq 0 ]; then
             git commit --amend --no-edit
             return
@@ -324,4 +345,24 @@ conditional_rb_pull() {
         info "Branch exists on remote. Syncing..."
         rb_pull_function "$working_branch"
     fi
+}
+
+# True when <branch> has diverged from its remote copy only because it was
+# rewritten locally (git sq, rebase, amend) after being pushed: the remote tip
+# is a commit this branch pointed at before, according to its reflog. Pulling
+# would then replay the old commits on top of the rewritten ones.
+# (This is the same test `git push --force-if-includes` uses.)
+history_rewritten() {
+    local branch="$1" tip entries
+
+    remote_branch_exists "$branch" || return 1
+    tip=$(git rev-parse "refs/remotes/$REMOTE/$branch") || return 1
+    # Remote is behind or equal: an ordinary push
+    git merge-base --is-ancestor "$tip" "refs/heads/$branch" && return 1
+
+    entries=$(git rev-list --walk-reflogs --max-count=200 "refs/heads/$branch" 2>/dev/null) || return 1
+    [ -n "$entries" ] || return 1
+    # Prints the tip if no reflog entry contains it
+    # shellcheck disable=SC2086
+    [ -z "$(git rev-list --max-count=1 "$tip" --not $entries)" ]
 }

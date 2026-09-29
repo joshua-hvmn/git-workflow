@@ -16,4 +16,5 @@ fi
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
 # MAIN
+detect_protected_branch "$@"
 commit_function "$@"

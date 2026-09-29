@@ -17,29 +17,38 @@ fi
 . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 
 require_branch
-PS_MODE="${1:-}"
-case "$PS_MODE" in
-force | -F | --force-with-lease)
+PS_MODE="default"
+case "${1:-}" in
+force | -f | -F | --force | --force-with-lease)
     PS_MODE="force"
     shift
     ;;
 -u)
-    PS_MODE="default"
     shift
     ;;
-*)
-    PS_MODE="default"
-    ;;
 esac
+if [ "$#" -gt 0 ]; then
+    err "unexpected argument '$1'. usage: git ps [force]"
+    exit 1
+fi
 
 case $PS_MODE in
 default)
     detect_protected_branch "push"
+    sync_remote
+    if history_rewritten "$working_branch"; then
+        err "'$working_branch' was rewritten (git sq, rebase, or amend) after it was pushed."
+        info "Syncing would replay the old commits on top. Publish the rewrite with: git ps force"
+        exit 1
+    fi
     conditional_rb_pull
     git push -u "$REMOTE" "$working_branch"
     ;;
 force)
-    detect_protected_branch "push"
-    git push --force-with-lease "$REMOTE" "$working_branch"
+    if is_protected_branch "$working_branch"; then # need a way to force it anywhere
+        err "refusing to force-push protected branch '$working_branch'."
+        exit 1
+    fi
+    git push --force-with-lease --force-if-includes -u "$REMOTE" "$working_branch"
     ;;
 esac

@@ -116,3 +116,10 @@ fake_gh() {
     chmod +x "$bin/gh"
     export PATH="$bin:$PATH" GH_LOG
 }
+
+squash_editor() {
+    local ed="$BATS_TEST_TMPDIR/squash_editor"
+    printf '#!/bin/sh\nsed "2,\\$s/^pick/fixup/" "$1" >"$1.tmp" && mv "$1.tmp" "$1"\n' >"$ed"
+    chmod +x "$ed"
+    printf '%s' "$ed"
+}
