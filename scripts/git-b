@@ -27,12 +27,13 @@ usage: git b [<subcommand>] [args]
   start <topic|release|hotfix> [name]   start a branch (release/hotfix name = vX.Y.Z)
   prerelease|pre [label|tag] [-n] [-l]  tag the release branch as vX.Y.Z-<label>.N and push
   finish [branch]                       merge per the flow, tag releases/hotfixes, push
-  delete [branch] [-y]                  delete a branch locally and on the remote
+  delete [branch] [-y] [-f]             delete a branch locally and on the remote (-f: even if unmerged)
   config                                show the effective workflow settings
   help                                  this message
   version                               show the git-workflow version
 
 Anything else is passed to 'git branch' (e.g. 'git b -a', 'git b -vv').
+Settings and guardrails: man git-workflow
 EOF
 }
 

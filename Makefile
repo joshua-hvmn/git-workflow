@@ -98,10 +98,13 @@ unaliases:
 	@git config --global --fixed-value --unset-all include.path "$(ALIASES_FILE)" 2>/dev/null || true
 	@echo "~/.gitconfig no longer includes $(ALIASES_FILE)"
 
-## lint: shellcheck the commands, libraries and test helper 
+## lint: shellcheck the commands, libraries and test helper; mandoc-lint the man pages
 lint:
 	cd scripts && shellcheck -x -P lib -e SC1091 git-* lib/*.sh
 	shellcheck -s bash tests/test_helper.bash
+	@if command -v mandoc >/dev/null 2>&1; then \
+		echo "mandoc -Tlint -W warning man/*"; mandoc -Tlint -W warning $(MAN1) $(MAN7); \
+	else echo "skipping man page lint (mandoc not installed)"; fi
 
 ## test: run the bats suite against this checkout (needs bats-core)
 test:
