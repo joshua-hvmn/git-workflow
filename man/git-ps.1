@@ -1,0 +1,32 @@
+.TH GIT-PS 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-ps \- sync with the remote branch, then push
+.SH SYNOPSIS
+.B git ps
+.RB [ force ]
+.SH DESCRIPTION
+Rebase the current branch onto its remote copy (if there is one), then
+.BR "git push \-u" .
+Pushing a protected branch warns first, or stops when
+.B workflow.strict
+is true.
+.PP
+If the branch was rewritten after it was pushed (by
+.BR git\-sq (1),
+a rebase or an amend),
+.B git ps
+stops and says to use
+.BR "git ps force" ,
+instead of replaying the old commits on top of the rewritten ones.
+.SH OPTIONS
+.TP
+.BR force ", " \-f
+Push with
+.B \-\-force\-with\-lease \-\-force\-if\-includes
+and no sync. The remote is overwritten only if its tip is something this
+branch has already seen, so commits that only arrived through a
+background fetch are never lost. Protected branches are never
+force-pushed.
+.SH SEE ALSO
+.BR git\-sq (1),
+.BR git\-workflow (7)

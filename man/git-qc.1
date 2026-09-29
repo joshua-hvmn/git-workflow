@@ -1,0 +1,33 @@
+.TH GIT-QC 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-qc \- commit, sync with the remote branch, and optionally push
+.SH SYNOPSIS
+.B git qc
+.RB [ p | \-p | \-\-push ]
+.RB [ \-\- ]
+.RI [ message ...]
+.SH DESCRIPTION
+Like
+.BR git\-c (1),
+then, if the branch exists on the remote, rebase it onto the remote copy.
+With
+.BR p ,
+push afterwards.
+.PP
+The commit happens before the sync: syncing first would autostash, and git
+restores an autostash without the staged/unstaged split, so a partial
+.B git add
+would be lost.
+.PP
+Only
+.BR p ,
+.B \-p
+and
+.B \-\-push
+select push mode; the word "push" starts the message like any other. Use
+.B \-\-
+before a message whose first word is "p".
+.SH SEE ALSO
+.BR git\-c (1),
+.BR git\-ps (1),
+.BR git\-workflow (7)

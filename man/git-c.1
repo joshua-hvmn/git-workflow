@@ -1,0 +1,42 @@
+.TH GIT-C 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-c \- commit with the message as plain words
+.SH SYNOPSIS
+.B git c
+.RB [ \-\-amend ]
+.RB [ \-\- ]
+.RI [ message ...]
+.SH DESCRIPTION
+Commit the staged changes. Every word is part of the message, so
+.B git c fix the bug
+commits "fix the bug". With no message, asks for one.
+If nothing is staged, shows the status and offers to stage everything
+.RB ( "git add \-A" ).
+.PP
+Committing on a protected branch warns first, or stops when
+.B workflow.strict
+is true.
+.PP
+Arguments starting with "\-" are refused, because they are almost always
+.BR git\-commit (1)
+flags typed from habit
+.RB ( "git c \-m fix"
+would otherwise commit "\-m fix"). Put
+.B \-\-
+before a message that really starts with a dash.
+.PP
+The shell still reads the words before git does: quote a message that
+contains
+.BR # ,
+.BR ' ,
+.BR * ,
+.B ?
+or
+.BR ! .
+.SH OPTIONS
+.TP
+.B \-\-amend
+Amend the last commit
+.SH SEE ALSO
+.BR git\-qc (1),
+.BR git\-workflow (7)

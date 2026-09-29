@@ -1,4 +1,5 @@
-#!/bin/bash
+# shellcheck shell=bash
+# Sourced by the git-* commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -15,7 +16,7 @@ fi
 __RELEASE_UTILS_LOADED=1
 
 if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
-    . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+    . "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -32,9 +33,15 @@ is_prerelease_version() {
     [[ "$1" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]
 }
 
-# version_gt A B -> true if A > B (stable versions only)
+# version_gt A B -> true if A > B. Both must be vX.Y.Z (callers validate first).
+# MacOS/BSD compatible sort instead of sort -V
 version_gt() {
-    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
+    local a="${1#v}" b="${2#v}" a1 a2 a3 b1 b2 b3
+    a1=${a%%.*} a3=${a##*.} a2=${a#*.} a2=${a2%.*}
+    b1=${b%%.*} b3=${b##*.} b2=${b#*.} b2=${b2%.*}
+    if [ "$a1" -ne "$b1" ]; then return $((a1 > b1 ? 0 : 1)); fi
+    if [ "$a2" -ne "$b2" ]; then return $((a2 > b2 ? 0 : 1)); fi
+    return $((a3 > b3 ? 0 : 1))
 }
 
 latest_stable_tag() {
@@ -93,6 +100,23 @@ validate_new_version() {
     if [ -n "$latest" ] && ! version_gt "$version" "$latest"; then
         flow_warn "'$version' is not newer than the latest release '$latest'." || return 1
     fi
+}
+
+# check_version_file <rev> <vX.Y.Z> <mode>
+# If the project keeps its version in a file (workflow.versionFile, default
+# VERSION), the file at <rev> must match the version being tagged. The release
+# workflow checks the same thing, but only after the tag is already public.
+# Accepts "v1.2.3" or "1.2.3". Skipped when the file doesn't exist at <rev>.
+check_version_file() {
+    local rev="$1" version="$2" mode="$3" have
+
+    [ -n "$VERSION_FILE" ] || return 0
+    have=$(git show "$rev:$VERSION_FILE" 2>/dev/null) || return 0
+    have=$(printf '%s' "$have" | tr -d '[:space:]')
+    if [ "$have" = "$version" ] || [ "v$have" = "$version" ]; then
+        return 0
+    fi
+    pre_flow_warn "$mode" "$VERSION_FILE says '$have', but this release is $version. Bump it on the branch before tagging."
 }
 
 # GitHub Actions URL for the remote, if it is a GitHub remote
@@ -216,15 +240,6 @@ prerelease_branch() {
 
     sync_remote
 
-    if [ "$mode" = "list" ]; then
-        if [ -z "$base" ]; then
-            err "cannot list prereleases: no version in branch name '$branch'."
-            return 1
-        fi
-        prerelease_tags_for "$base"
-        return 0
-    fi
-
     # Work out the tag
     if is_prerelease_version "$arg"; then
         tag="$arg"
@@ -258,6 +273,8 @@ prerelease_branch() {
     if [ -n "$latest" ] && ! version_gt "$base" "$latest"; then
         pre_flow_warn "$mode" "'$base' is not newer than the latest release '$latest'." || return 1
     fi
+
+    check_version_file HEAD "$base" "$mode" || return 1
 
     sha=$(git rev-parse --short HEAD)
 

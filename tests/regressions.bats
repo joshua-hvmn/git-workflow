@@ -1,7 +1,10 @@
 #!/usr/bin/env bats
-# One test per bug fixed in v1.3.0. Each failed against v1.2.2.
+# One test per fixed bug, grouped by the release that fixed it.
+# Each one fails against the release before it.
 
 load test_helper
+
+# --- v1.3.0 ------------------------------------------------------------------
 
 @test "qc: partially staged changes stay partial (commit before sync)" {
     git switch -qc feat
@@ -173,7 +176,7 @@ load test_helper
     git fetch -q origin
     git branch -f next origin/next
 
-    GIT_SEQUENCE_EDITOR="sed -i '2,\$s/^pick/fixup/'" run git sq
+    GIT_SEQUENCE_EDITOR=$(squash_editor) run git sq
     [ "$status" -eq 0 ]
     [ "$(git merge-base HEAD origin/next)" = "$base" ]
     [ "$(git rev-list --count "$base"..HEAD)" -eq 1 ]
@@ -206,4 +209,285 @@ load test_helper
     run git b version
     [ "$status" -eq 0 ]
     [ "$output" = "git-workflow $(cat "$REPO_ROOT/VERSION")" ]
+}
+
+# --- v1.4.0 ------------------------------------------------------------------
+
+@test "finish topic: a rejected push rolls back, and finish can simply rerun" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    reject_pushes
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Rolled back"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+
+    allow_pushes
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    git fetch -q --prune origin
+    [ "$(git log -1 --format=%s origin/next)" = "Merge branch 'foo' into next" ]
+}
+
+@test "finish topic: a merge conflict is aborted and rolled back" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    remote_commit next a # conflicting change on next
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"conflicted"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+    no_merge_in_progress
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+}
+
+@test "finish release: a merge conflict with main is aborted and rolled back" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    remote_commit main a # conflicting change on main
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    no_merge_in_progress
+}
+
+@test "finish release: a diverged local next rolls back the merge and tag" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    git switch -q next
+    commit_change b "local only"
+    git switch -q release/v1.1.0
+    remote_commit next b
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"diverged"* ]]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    # the unpushed commit on next is untouched
+    [ "$(git log -1 --format=%s next)" = "local only" ]
+}
+
+@test "finish release: a back-merge conflict can be rolled back" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    remote_commit next a # next changed the same lines after the release branched
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"back-merge"* ]]
+    [[ "$output" == *"Rolled back"* ]]
+    [ "$(git branch --show-current)" = "release/v1.1.0" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+    no_merge_in_progress
+}
+
+@test "c: commits on a protected branch get the same guardrail as qc" {
+    git config workflow.strict true
+    echo x >>a
+    git add a
+    run git c on main
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"workflow.strict"* ]]
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+}
+
+@test "c: a git-commit flag is rejected instead of becoming the message" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    run git c -m "fix the bug"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unknown option '-m'"* ]]
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+}
+
+@test "c: -- allows a message that starts with a dash" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    git c -- -x flag removed
+    [ "$(git log -1 --format=%s)" = "-x flag removed" ]
+}
+
+@test "qc: the word 'push' starts the message instead of selecting push mode" {
+    git switch -qc feat
+    echo x >>a
+    git add a
+    run git qc push notifications for alerts
+    [ "$status" -eq 0 ]
+    [ "$(git log -1 --format=%s)" = "push notifications for alerts" ]
+    remote_lacks_ref refs/heads/feat
+}
+
+@test "ps force: never force-pushes a protected branch, strict or not" {
+    run git ps force </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"refusing to force-push"* ]]
+}
+
+@test "ps force: won't overwrite commits it only saw through a background fetch" {
+    git switch -qc feat
+    commit_change a "mine"
+    git push -qu origin feat
+    remote_commit feat b # someone else pushes
+    git fetch -q origin  # an editor's background fetch picks it up
+    git commit -q --amend -m "mine, amended"
+
+    run git ps force
+    [ "$status" -ne 0 ]
+    git fetch -q origin
+    [ "$(git log -1 --format=%s origin/feat)" = "upstream change on feat" ]
+}
+
+@test "ps: after a squash it says to force-push instead of replaying old commits" {
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+    git reset -q --soft origin/main
+    git commit -qm squashed
+
+    run git ps
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git ps force"* ]]
+    [ "$(git log -1 --format=%s)" = "squashed" ]
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 1 ]
+
+    run git ps force
+    [ "$status" -eq 0 ]
+    [ "$(git rev-parse origin/feat)" = "$(git rev-parse HEAD)" ]
+}
+
+@test "sq: a hotfix squashes against main, not the dev branch" {
+    local_next
+    remote_commit main b # a commit on main that next doesn't have
+    git b start hotfix v1.0.1 >/dev/null 2>&1
+    commit_change a c1
+    commit_change a c2
+
+    GIT_SEQUENCE_EDITOR=$(squash_editor) run git sq
+    [ "$status" -eq 0 ]
+    git merge-base --is-ancestor origin/main HEAD
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 1 ]
+    # the squashed commits were never pushed, so no force-push is needed
+    [[ "$output" != *"git ps force"* ]]
+}
+
+@test "pre: a VERSION file that doesn't match stops the tag before it's public" {
+    git config workflow.strict true
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    echo v1.0.0 >VERSION
+    git add VERSION
+    git commit -qm "forgot to bump"
+
+    run git b pre <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERSION says 'v1.0.0', but this release is v1.1.0"* ]]
+    [ -z "$(git tag -l 'v1.1.0-*')" ]
+
+    echo 1.1.0 >VERSION # without the v also counts
+    git commit -qam bump
+    run git b pre <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    remote_has_ref refs/tags/v1.1.0-rc.1
+}
+
+@test "finish: a VERSION file that doesn't match stops before merging" {
+    git config workflow.strict true
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    echo v1.0.0 >VERSION
+    git add VERSION
+    git commit -qm "forgot to bump"
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERSION says"* ]]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+
+    git config workflow.versionFile ""
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+}
+
+@test "delete: refuses a branch with unmerged commits unless -f" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "unmerged work"
+    git push -q origin foo
+    git switch -q next
+
+    run git b delete foo -y
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git b delete foo -f"* ]]
+    git rev-parse --verify --quiet refs/heads/foo >/dev/null
+
+    run git b delete foo -y -f
+    [ "$status" -eq 0 ]
+    no_local_branch foo
+    remote_lacks_ref refs/heads/foo
+}
+
+@test "delete: refuses when the remote copy has commits you never fetched" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    git switch -q next
+    remote_commit foo b # someone else pushed to foo
+
+    run git b delete foo -y
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"'origin/foo' has commits"* ]]
+    remote_has_ref refs/heads/foo
+}
+
+@test "delete: -y without a branch name still asks, and -y alone is not a branch" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+
+    run git b delete -y </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Deletion aborted"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+}
+
+@test "delete: deletes a branch that only exists on the remote" {
+    (cd "$SEED" && git push -q origin main:gone)
+    run git b delete gone -y
+    [ "$status" -eq 0 ]
+    remote_lacks_ref refs/heads/gone
+}
+
+@test "start: untracked files don't block starting a branch" {
+    local_next
+    echo scratch >notes.txt
+    run git b start topic foo
+    [ "$status" -eq 0 ]
+    [ "$(git branch --show-current)" = "foo" ]
+    [ -f notes.txt ]
+}
+
+@test "start: refuses a name that already exists on the remote" {
+    local_next
+    (cd "$SEED" && git push -q origin main:foo)
+    run git b start topic foo
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already exists on 'origin'"* ]]
+    no_local_branch foo
 }

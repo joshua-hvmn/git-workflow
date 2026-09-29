@@ -1,4 +1,5 @@
-#!/bin/bash
+# shellcheck shell=bash
+# Sourced by the git-* commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -40,6 +41,8 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #   git config workflow.hotfixPrefix    hotfix/
 #   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
+#   git config workflow.finishTopic     merge     # merge | pr (open a pull request with gh instead)
+#   git config workflow.versionFile     VERSION   # must match the tag in pre/finish; "" disables
 #   git config --add workflow.protected staging   # extra protected branches (multi-valued)
 #
 # ---------------------------------------------------------------------------
@@ -53,6 +56,7 @@ RELEASE_PREFIX=release/
 HOTFIX_PREFIX=hotfix/
 PRERELEASE_LABEL=rc
 STRICT=false
+FINISH_TOPIC=merge
 EXTRA_PROTECTED=''
 
 while read -r __key __value; do
@@ -64,6 +68,8 @@ while read -r __key __value; do
     workflow.hotfixprefix) HOTFIX_PREFIX="$__value" ;;
     workflow.prereleaselabel) PRERELEASE_LABEL="$__value" ;;
     workflow.protected) EXTRA_PROTECTED="$EXTRA_PROTECTED $__value" ;;
+    workflow.finishtopic) FINISH_TOPIC="$__value" ;;
+    workflow.versionfile) VERSION_FILE="$__value" ;;
     workflow.strict)
         # A bare `strict` with no value means true, same as git's own booleans
         case "$__value" in
@@ -74,6 +80,14 @@ while read -r __key __value; do
     esac
 done < <(git config --get-regexp '^workflow\.' 2>/dev/null || true)
 unset __key __value
+
+case "$FINISH_TOPIC" in
+merge | pr) ;;
+*)
+    warn "workflow.finishTopic must be 'merge' or 'pr', not '$FINISH_TOPIC'; using 'merge'."
+    FINISH_TOPIC=merge
+    ;;
+esac
 
 # GitHub / Trunk-based flow: no separate integration branch
 if [ "$DEV_BRANCH" = "$MAIN_BRANCH" ]; then
@@ -240,10 +254,31 @@ commit_pre_checks() {
     fi
     commit_message_check "$@" || return 1
 }
-# commit function, call this in quick commit
+# commit_function [--amend] [--] [message words...]
+# The message is plain words, so anything else starting with "-" is almost
+# certainly a `git commit` flag typed from habit: `git c -m "fix"` would
+# otherwise commit the message "-m fix". Put -- before a message that really
+# starts with a dash.
 commit_function() {
+    local amend=""
+
     if [ "${1:-}" = "--amend" ]; then
+        amend=1
         shift
+    fi
+    if [ "${1:-}" = "--" ]; then
+        shift
+    else
+        case "${1:-}" in
+        -*)
+            err "unknown option '$1'. The message is plain words: git c fix the bug, or git qc 'fix the bug'"
+            info "(use --): git c [--amend] -- $1"
+            return 1
+            ;;
+        esac
+    fi
+
+    if [ -n "$amend" ]; then
         if [ "$#" -eq 0 ]; then
             git commit --amend --no-edit
             return
@@ -313,4 +348,24 @@ conditional_rb_pull() {
         info "Branch exists on remote. Syncing..."
         rb_pull_function "$working_branch"
     fi
+}
+
+# True when <branch> has diverged from its remote copy only because it was
+# rewritten locally (git sq, rebase, amend) after being pushed: the remote tip
+# is a commit this branch pointed at before, according to its reflog. Pulling
+# would then replay the old commits on top of the rewritten ones.
+# (This is the same test `git push --force-if-includes` uses.)
+history_rewritten() {
+    local branch="$1" tip entries
+
+    remote_branch_exists "$branch" || return 1
+    tip=$(git rev-parse "refs/remotes/$REMOTE/$branch") || return 1
+    # Remote is behind or equal: an ordinary push
+    git merge-base --is-ancestor "$tip" "refs/heads/$branch" && return 1
+
+    entries=$(git rev-list --walk-reflogs --max-count=200 "refs/heads/$branch" 2>/dev/null) || return 1
+    [ -n "$entries" ] || return 1
+    # Prints the tip if no reflog entry contains it
+    # shellcheck disable=SC2086
+    [ -z "$(git rev-list --max-count=1 "$tip" --not $entries)" ]
 }
