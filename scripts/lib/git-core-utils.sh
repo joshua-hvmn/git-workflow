@@ -41,6 +41,7 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
 #   git config workflow.finishTopic     merge     # merge | pr (open a pull request with gh instead)
+#   git config workflow.versionFile     VERSION   # must match the tag in pre/finish; "" disables
 #   git config --add workflow.protected staging   # extra protected branches (multi-valued)
 #
 # ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ while read -r __key __value; do
     workflow.prereleaselabel) PRERELEASE_LABEL="$__value" ;;
     workflow.protected) EXTRA_PROTECTED="$EXTRA_PROTECTED $__value" ;;
     workflow.finishtopic) FINISH_TOPIC="$__value" ;;
+    workflow.versionfile) VERSION_FILE="$__value" ;;
     workflow.strict)
         # A bare `strict` with no value means true, same as git's own booleans
         case "$__value" in

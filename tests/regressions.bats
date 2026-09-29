@@ -387,3 +387,107 @@ load test_helper
     # the squashed commits were never pushed, so no force-push is needed
     [[ "$output" != *"git ps force"* ]]
 }
+
+@test "pre: a VERSION file that doesn't match stops the tag before it's public" {
+    git config workflow.strict true
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    echo v1.0.0 >VERSION
+    git add VERSION
+    git commit -qm "forgot to bump"
+
+    run git b pre <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERSION says 'v1.0.0', but this release is v1.1.0"* ]]
+    [ -z "$(git tag -l 'v1.1.0-*')" ]
+
+    echo 1.1.0 >VERSION # without the v also counts
+    git commit -qam bump
+    run git b pre <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    remote_has_ref refs/tags/v1.1.0-rc.1
+}
+
+@test "finish: a VERSION file that doesn't match stops before merging" {
+    git config workflow.strict true
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    echo v1.0.0 >VERSION
+    git add VERSION
+    git commit -qm "forgot to bump"
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERSION says"* ]]
+    [ "$(git rev-parse main)" = "$(git rev-parse origin/main)" ]
+    [ -z "$(git tag -l v1.1.0)" ]
+
+    git config workflow.versionFile ""
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+}
+
+@test "delete: refuses a branch with unmerged commits unless -f" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "unmerged work"
+    git push -q origin foo
+    git switch -q next
+
+    run git b delete foo -y
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git b delete foo -f"* ]]
+    git rev-parse --verify --quiet refs/heads/foo >/dev/null
+
+    run git b delete foo -y -f
+    [ "$status" -eq 0 ]
+    no_local_branch foo
+    remote_lacks_ref refs/heads/foo
+}
+
+@test "delete: refuses when the remote copy has commits you never fetched" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    git switch -q next
+    remote_commit foo b # someone else pushed to foo
+
+    run git b delete foo -y
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"'origin/foo' has commits"* ]]
+    remote_has_ref refs/heads/foo
+}
+
+@test "delete: -y without a branch name still asks, and -y alone is not a branch" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+
+    run git b delete -y </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Deletion aborted"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+}
+
+@test "delete: deletes a branch that only exists on the remote" {
+    (cd "$SEED" && git push -q origin main:gone)
+    run git b delete gone -y
+    [ "$status" -eq 0 ]
+    remote_lacks_ref refs/heads/gone
+}
+
+@test "start: untracked files don't block starting a branch" {
+    local_next
+    echo scratch >notes.txt
+    run git b start topic foo
+    [ "$status" -eq 0 ]
+    [ "$(git branch --show-current)" = "foo" ]
+    [ -f notes.txt ]
+}
+
+@test "start: refuses a name that already exists on the remote" {
+    local_next
+    (cd "$SEED" && git push -q origin main:foo)
+    run git b start topic foo
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already exists on 'origin'"* ]]
+    no_local_branch foo
+}

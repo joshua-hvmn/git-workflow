@@ -212,3 +212,13 @@ load test_helper
     [ "$status" -ne 0 ]
     [[ "$output" == *"behind"* ]]
 }
+
+@test "versions compare numerically: v1.10.0 is newer than v1.9.0" {
+    git config workflow.strict true
+    local_next
+    git tag -a v1.9.0 -m v1.9.0
+    run git b start release v1.10.0
+    [ "$status" -eq 0 ]
+    run git b start release v1.8.0
+    [ "$status" -ne 0 ]
+}

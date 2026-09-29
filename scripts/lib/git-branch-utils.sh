@@ -12,7 +12,7 @@ if [ -n "${__BRANCH_UTILS_LOADED:-}" ]; then
 fi
 __BRANCH_UTILS_LOADED=1
 
-if [ -z "$__CORE_UTILS_LOADED" ]; then
+if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
     . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
 fi
 if [ -z "${__RELEASE_UTILS_LOADED:-}" ]; then
@@ -21,15 +21,7 @@ fi
 
 # FUNCTIONS
 
-check_no_untracked() {
-    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
-        err "working tree has files that autostash can't stash. Commit, stash -u, or ignore them first."
-        return 1
-    fi
-}
-
 require_clean_tree() {
-    check_no_untracked || return 1
     if ! git diff --quiet HEAD -- 2>/dev/null; then
         err "you have uncommitted changes. Commit or stash them first."
         git status --short >&2
@@ -94,7 +86,6 @@ start_branch() {
         ;;
     esac
 
-    check_no_untracked || return 1
     sync_remote
     check_for_branch "$base_branch" || return 1
 
@@ -115,6 +106,11 @@ start_branch() {
 
     if git rev-parse --verify --quiet "refs/heads/$full_branch_name" >/dev/null; then
         err "branch '$full_branch_name' already exists."
+        return 1
+    fi
+
+    if remote_branch_exists "$full_branch_name"; then
+        err "branch '$full_branch_name' already exists on '$REMOTE'. Pick another name, or check it out: git switch $full_branch_name"
         return 1
     fi
 
@@ -217,6 +213,7 @@ finish_release() {
 
     version=$(branch_version "$branch")
     validate_new_version "$version" || return 1
+    check_version_file "$branch" "$version" finish || return 1
 
     if [ -z "$(prerelease_tags_for "$version")" ]; then
         note "No prereleases were cut for $version (git b pre). Releasing untested artifacts."
@@ -319,45 +316,108 @@ finish_release() {
     fi
 }
 
+# Commits on <ref> that would be lost if every branch except main/devBranch
+# (local and remote) and the current one went away. Prints nothing if merged.
+unmerged_commits() {
+    local ref="$1" branch="$2" keep="" r
+
+    for r in "refs/heads/$MAIN_BRANCH" "refs/heads/$DEV_BRANCH" \
+        "refs/remotes/$REMOTE/$MAIN_BRANCH" "refs/remotes/$REMOTE/$DEV_BRANCH"; do
+        git rev-parse --verify --quiet "$r" >/dev/null && keep="$keep $r"
+    done
+    if [ "$(get_working_branch)" != "$branch" ]; then
+        keep="$keep HEAD"
+    fi
+    # shellcheck disable=SC2086
+    git rev-list --max-count=1 "$ref" --not $keep
+}
+
+# delete [branch] [-y] [-f]
+#   -y  don't ask (only together with an explicit branch name)
+#   -f  delete even if it has commits that aren't merged into main/devBranch
 delete_branch() {
-    local delete_choice="${1:-$working_branch}"
-    local force_mode="${2:-}"
-    local return_to=""
+    local branch="" no_prompt="" force="" have_local="" ref question
 
-    detect_protected_branch "del_branch" "$delete_choice" || return 1
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -y | --yes | --y | -d | --d | --delete) no_prompt=1 ;;
+        -f | --force | -D) force=1 ;;
+        -*)
+            err "unknown option: $1. usage: git b delete [branch] [-y] [-f]"
+            return 1
+            ;;
+        *)
+            if [ -z "$branch" ]; then
+                branch="$1"
+            else
+                case "$1" in
+                y | yes | d) no_prompt=1 ;;
+                *)
+                    err "too many arguments. usage: git b delete [branch] [-y] [-f]"
+                    return 1
+                    ;;
+                esac
+            fi
+            ;;
+        esac
+        shift
+    done
+    if [ -z "$branch" ]; then
+        branch="$working_branch"
+        no_prompt="" # -y only skips the question when the branch is named
+    fi
+    if [ -z "$branch" ]; then
+        err "not on a branch; pass the branch to delete."
+        return 1
+    fi
 
-    if [ "$(get_working_branch)" = "$delete_choice" ]; then
-        require_clean_tree || return 1 # do not drag edits to dev during delete
+    detect_protected_branch "del_branch" "$branch" || return 1
+    sync_remote
+
+    if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+        have_local=1
+    elif ! remote_branch_exists "$branch"; then
+        err "no branch '$branch' locally or on '$REMOTE'."
+        return 1
+    fi
+
+    # Everything is checked before anything is switched or deleted
+    if [ -z "$force" ]; then
+        for ref in "refs/heads/$branch" "refs/remotes/$REMOTE/$branch"; do
+            git rev-parse --verify --quiet "$ref" >/dev/null || continue
+            if [ -n "$(unmerged_commits "$ref" "$branch")" ]; then
+                err "'${ref#refs/*/}' has commits that aren't merged into $DEV_BRANCH or $MAIN_BRANCH."
+                info "Delete it anyway with: git b delete $branch -f"
+                return 1
+            fi
+        done
+    fi
+    if [ "$(get_working_branch)" = "$branch" ]; then
+        require_clean_tree || return 1 # don't carry edits onto the dev branch
+    fi
+
+    if [ -z "$no_prompt" ]; then
+        question="Delete '$branch' locally and on '$REMOTE'?"
+        [ -n "$force" ] && question="Delete '$branch' locally and on '$REMOTE', including unmerged commits?"
+        if ! yes_no "$question"; then
+            info "Deletion aborted."
+            return 1
+        fi
+    fi
+
+    if [ "$(get_working_branch)" = "$branch" ]; then
         git switch "$DEV_BRANCH" || {
             err "failed to switch to $DEV_BRANCH (does it exist?)"
             return 1
         }
-        return_to="$delete_choice"
     fi
-
-    case "$force_mode" in
-    yes | -y | --yes | --y | y | d | -d | --d | --delete)
-        info "Deleting."
-        ;;
-    *)
-        if ! yes_no "Delete '$delete_choice' locally and remotely?"; then
-            info "Deletion aborted."
-            [ -n "$return_to" ] && git switch "$return_to"
-            return 1
-        fi
-        ;;
-    esac
-
-    local del_flag="-d"
-    git merge-base --is-ancestor "$delete_choice" HEAD 2>/dev/null && del_flag="-D"
-    git branch "$del_flag" "$delete_choice" || {
-        [ -n "$return_to" ] && git switch "$return_to"
-        return 1
-    }
-    if remote_branch_exists "$delete_choice"; then
-        git push "$REMOTE" --delete "$delete_choice" || warn "remote delete failed"
+    if [ -n "$have_local" ]; then
+        git branch -D "$branch" || return 1
     fi
-    info "Branch $delete_choice deleted."
+    if remote_branch_exists "$branch"; then
+        git push "$REMOTE" --delete "$branch" || warn "remote delete failed"
+    fi
+    info "Branch $branch deleted."
 }
 
 show_config() {
@@ -374,6 +434,7 @@ git-workflow settings (git config workflow.<key>):
   prereleaseLabel  $PRERELEASE_LABEL
   strict           $STRICT
   finishTopic      $FINISH_TOPIC
+  versionFile      ${VERSION_FILE:-(disabled)}
   protected        $MAIN_BRANCH $DEV_BRANCH ${EXTRA_PROTECTED}
 EOF
 }
