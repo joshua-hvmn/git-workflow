@@ -300,7 +300,7 @@ load test_helper
     git config workflow.strict true
     echo x >>a
     git add a
-    run git c on main
+    run git c fix the bug
     [ "$status" -ne 0 ]
     [[ "$output" == *"workflow.strict"* ]]
     [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]

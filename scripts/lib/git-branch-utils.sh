@@ -200,7 +200,7 @@ finish_topic() {
     if ! git push "$REMOTE" "$DEV_BRANCH"; then
         err "push to '$REMOTE' was rejected; nothing was published."
         finish_rollback "$branch" "" "" "$dev_before" || return 1
-        info "Rolled back; you are on '$branch'. If someone pushed to '$DEV_BRANCH first, run 'git b finish' again."
+        info "Rolled back; you are on '$branch'. If someone pushed to '$DEV_BRANCH' first, run 'git b finish' again."
         info "If '$DEV_BRANCH' only accepts pull requests: git config workflow.finishTopic pr"
         return 1
     fi
@@ -225,7 +225,7 @@ finish_release() {
     if [ "$type" = "hotfix" ] && [ "$TRUNK_MODE" -eq 0 ]; then
         open_releases=$(other_release_branches "")
         if [ -n "$open_releases" ]; then
-            warn "releas branch(es) open: $(printf '%s' "$open_releases" | tr '\n' ' ')- git flow also merges hotfixes into them; do that manually after this."
+            warn "release branch(es) open: $(printf '%s' "$open_releases" | tr '\n' ' ')- git flow also merges hotfixes into them; do that manually after this."
         fi
     fi
 
@@ -287,7 +287,7 @@ finish_release() {
     delete_branch "$branch" || note "Kept branch '$branch'."
 }
 
-+finish_branch() {
+finish_branch() {
     local branch="${1:-$working_branch}"
     local type="topic"
 

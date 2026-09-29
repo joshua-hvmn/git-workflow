@@ -16,9 +16,9 @@ if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
     GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
 fi
 # Source util script
-. "$GIT_WORKFLOW_LIBDIR/lib/git-core-utils.sh"
-. "$GIT_WORKFLOW_LIBDIR/lib/git-release-utils.sh"
-. "$GIT_WORKFLOW_LIBDIR/lib/git-branch-utils.sh"
+. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
+. "$GIT_WORKFLOW_LIBDIR/git-release-utils.sh"
+. "$GIT_WORKFLOW_LIBDIR/git-branch-utils.sh"
 
 b_usage() {
     cat >&2 <<EOF

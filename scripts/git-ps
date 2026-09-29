@@ -14,7 +14,7 @@ GIT_WORKFLOW_LIBDIR=
 if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
     GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
 fi
-. "$GIT_WORKFLOW_LIBDIR/lib/git-core-utils.sh"
+. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
 
 require_branch
 PS_MODE="default"

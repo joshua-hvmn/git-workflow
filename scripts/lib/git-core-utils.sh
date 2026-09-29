@@ -57,6 +57,7 @@ HOTFIX_PREFIX=hotfix/
 PRERELEASE_LABEL=rc
 STRICT=false
 FINISH_TOPIC=merge
+VERSION_FILE=VERSION
 EXTRA_PROTECTED=''
 
 while read -r __key __value; do
