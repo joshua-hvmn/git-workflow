@@ -1,4 +1,5 @@
-#!/bin/bash
+# shellcheck shell=bash
+# Sourced by the git-* commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -15,7 +16,7 @@ fi
 __RELEASE_UTILS_LOADED=1
 
 if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
-    . "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+    . "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
 fi
 
 # ---------------------------------------------------------------------------

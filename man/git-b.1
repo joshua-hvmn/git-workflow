@@ -1,0 +1,109 @@
+.TH GIT-B 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-b \- start, prerelease, finish and delete branches following the flow
+.SH SYNOPSIS
+.B git b
+.RI [ git-branch-options ]
+.br
+.B git b start
+.BR topic | release | hotfix
+.RI [ name ]
+.br
+.B git b pre
+.RI [ label | tag ]
+.RB [ \-n ]
+.RB [ \-l ]
+.br
+.B git b finish
+.RI [ branch ]
+.br
+.B git b delete
+.RI [ branch ]
+.RB [ \-y ]
+.RB [ \-f ]
+.br
+.B git b config
+|
+.B help
+|
+.B version
+.SH DESCRIPTION
+With no subcommand, or one it doesn't recognise,
+.B git b
+runs
+.BR git\-branch (1)
+with the same arguments.
+.SH COMMANDS
+.TP
+.B start topic | release | hotfix \fR[\fIname\fR]
+Create a branch from the right base and push it.
+Topic branches start from the dev branch;
+.I release/vX.Y.Z
+from the dev branch;
+.I hotfix/vX.Y.Z
+from the main branch.
+Release and hotfix versions are checked against existing tags.
+Tracked edits come along, as with
+.BR "git switch \-c" .
+A name that already exists locally or on the remote is refused.
+.TP
+.B pre \fR[\fIlabel\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR]
+Tag the current release or hotfix branch as a prerelease and push the tag.
+With no argument the tag is
+.IR vX.Y.Z\-rc.N ,
+numbered after the existing ones; a
+.I label
+replaces
+.BR rc ;
+a full
+.I tag
+is used as given.
+Unpushed branch commits are pushed first (after asking); a branch that is
+behind its remote is refused.
+.B \-n
+shows what would be tagged and never prompts or stops.
+.B \-l
+lists the prereleases for the branch's version.
+.TP
+.B finish \fR[\fIbranch\fR]
+A topic branch is merged into the dev branch with
+.BR \-\-no\-ff ,
+pushed, and deleted (or, with
+.BR "workflow.finishTopic=pr" ,
+pushed and opened as a pull request).
+A release or hotfix branch is merged into the main branch, tagged
+.IR vX.Y.Z ,
+merged back into the dev branch (git flow only), and pushed with
+.B git push \-\-atomic
+together with that one tag.
+Nothing is pushed until every local step has succeeded. If a merge
+conflicts, the dev branch has diverged, or the push is rejected, finish
+restores the main and dev branches, deletes the tag it made, and returns
+to the branch being finished, so it can simply be run again. For a
+rejected release push or a back-merge conflict it asks first, and
+otherwise prints the command that completes the release by hand.
+.TP
+.B delete \fR[\fIbranch\fR] [\fB\-y\fR] [\fB\-f\fR]
+Delete a branch locally and on the remote.
+.B \-y
+skips the question, and only applies when the branch is named.
+A branch with commits that aren't merged into the main or dev branch
+(locally or on the remote copy) is refused unless
+.B \-f
+is given. Protected branches are never deleted.
+.TP
+.B config
+Show the effective settings.
+.TP
+.B version
+Show the installed version.
+.SH EXAMPLES
+.nf
+git b start release v1.2.0
+git b pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
+git b pre              # v1.2.0\-rc.2
+git b finish           # v1.2.0 on main, merged back into next
+.fi
+.SH SEE ALSO
+.BR git\-workflow (7)
+for configuration and guardrails.

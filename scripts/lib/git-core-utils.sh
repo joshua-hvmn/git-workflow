@@ -1,4 +1,5 @@
-#!/bin/bash
+# shellcheck shell=bash
+# Sourced by the git-* commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman

@@ -1,0 +1,24 @@
+.TH GIT-SQ 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-sq \- interactively squash the current branch's own commits
+.SH SYNOPSIS
+.B git sq
+.RI [ base ]
+.SH DESCRIPTION
+Run
+.B git rebase \-i \-\-keep\-base
+against
+.IR base :
+by default the remote copy of the dev branch, or of the main branch for
+hotfix branches. Only this branch's commits are rewritten; the branch is
+never moved onto a newer base (that is what
+.BR git\-sync (1)
+is for), so a squash can't turn into a surprise conflict.
+.PP
+Rewriting a protected branch warns first, or stops when
+.B workflow.strict
+is true. If the squashed commits had been pushed, it says to publish with
+.BR "git ps force" .
+.SH SEE ALSO
+.BR git\-ps (1),
+.BR git\-workflow (7)

@@ -1,0 +1,18 @@
+.TH GIT-RB-PULL 1 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-rb-pull \- switch to a branch and bring it up to date with the remote
+.SH SYNOPSIS
+.B git rb\-pull
+.RI [ branch ]
+.SH DESCRIPTION
+Switch to
+.I branch
+(default: the current branch) and update it from its remote copy.
+.PP
+Protected branches (the main and dev branches) are only fast-forwarded,
+and the command stops if they have diverged, so unpushed merge commits are
+never flattened. Other branches are rebased onto the remote with
+.BR \-\-autostash .
+.SH SEE ALSO
+.BR git\-sync (1),
+.BR git\-workflow (7)
