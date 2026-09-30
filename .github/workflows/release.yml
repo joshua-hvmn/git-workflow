@@ -31,7 +31,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      content: read
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release # waits for approval; only this job can read the key
     permissions:
-      content: write # create the release
+      contents: write # create the release
       id-token: write # sigstore certificate for the attestation
       attestations: write # store the attestation
     env:
