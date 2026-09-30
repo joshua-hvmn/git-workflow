@@ -1,4 +1,5 @@
-# Keep release tarballs (git archive) to what users install
+# Release tarballs (git archive) carry what's needed to install and to test:
+# packagers run `make check` before `make install`.
 .github/ export-ignore
-tests/ export-ignore
 .gitattributes export-ignore
+packaging/ export-ignore

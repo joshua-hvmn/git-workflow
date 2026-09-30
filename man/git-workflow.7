@@ -1,0 +1,177 @@
+.TH GIT-WORKFLOW 7 2026-09-24 git-workflow "git-workflow manual"
+.SH NAME
+git-workflow \- git subcommands for git flow and trunk flow, with SemVer releases and guardrails
+.SH SYNOPSIS
+.B git b
+.RI [ subcommand ]
+.br
+.B git c
+.RI [ message ]
+.br
+.B git qc
+.RB [ p ]
+.RI [ message ]
+.br
+.B git ps
+.RB [ force ]
+.br
+.B git sync
+.RI [ branch ]
+.br
+.B git rb\-pull
+.RI [ branch ]
+.br
+.B git sq
+.RI [ base ]
+.SH DESCRIPTION
+git-workflow makes a branching model the default path.
+.PP
+In
+.B git flow
+(the default), topic branches start from and merge into the integration
+branch
+.RB ( next ),
+release branches
+.RI ( release/vX.Y.Z )
+start from
+.B next
+and merge into
+.BR main ,
+and hotfix branches
+.RI ( hotfix/vX.Y.Z )
+start from and merge into
+.BR main .
+Every release is tagged on
+.B main
+and merged back into
+.BR next .
+.PP
+In
+.B trunk / GitHub flow
+(set
+.B workflow.devBranch
+equal to
+.BR workflow.mainBranch ),
+everything starts from and merges into
+.BR main .
+.PP
+Release and hotfix versions are SemVer with a leading "v".
+.B git b pre
+tags a release branch as
+.I vX.Y.Z\-rc.N
+so a tag-triggered CI workflow can publish a prerelease before anything
+reaches
+.BR main .
+.SH CONFIGURATION
+All settings live in
+.BR git\-config (1)
+under
+.BR workflow. ,
+globally or per repository. All are optional.
+.TP
+.B workflow.mainBranch
+Production branch; stable tags live here. Default:
+.BR main .
+.TP
+.B workflow.devBranch
+Integration branch. Default:
+.BR next .
+Set it equal to
+.B workflow.mainBranch
+for trunk / GitHub flow.
+.TP
+.B workflow.remote
+Remote to sync with. Default:
+.BR origin .
+.TP
+.B workflow.releasePrefix
+Release branch prefix. Default:
+.BR release/ .
+.TP
+.B workflow.hotfixPrefix
+Hotfix branch prefix. Default:
+.BR hotfix/ .
+.TP
+.B workflow.prereleaseLabel
+Default label for
+.BR "git b pre" .
+Default:
+.BR rc .
+.TP
+.B workflow.strict
+.B true
+turns flow warnings into hard stops;
+.B false
+warns and asks. Default:
+.BR false .
+.TP
+.B workflow.protected
+Extra protected branches, in addition to the main and dev branches.
+Multi-valued: use
+.BR "git config \-\-add" .
+.TP
+.B workflow.finishTopic
+.B merge
+(default): finishing a topic branch merges it locally and pushes.
+.BR pr :
+push the branch and open a pull request with
+.BR gh (1)
+instead, for repositories whose dev branch only accepts pull requests.
+.TP
+.B workflow.versionFile
+File that holds the project's version. When it exists,
+.B git b pre
+and
+.B git b finish
+check that it matches the version being tagged ("v1.2.3" or "1.2.3").
+Default:
+.BR VERSION .
+An empty value disables the check.
+.SH GUARDRAILS
+These warn and ask, or stop when
+.B workflow.strict
+is true:
+.IP \(bu 2
+committing or pushing directly on a protected branch
+.IP \(bu 2
+release or hotfix names that aren't vX.Y.Z, or aren't newer than the latest release
+.IP \(bu 2
+opening a second release branch while one is open
+.IP \(bu 2
+cutting a prerelease from a branch that isn't a release or hotfix branch,
+or with a tag whose version doesn't match the branch
+.IP \(bu 2
+tagging with uncommitted changes, with commits the remote branch doesn't
+have, or with a version file that doesn't match
+.PP
+These always stop: reusing an existing tag, prereleasing a version that
+already shipped, finishing or deleting a protected branch, force-pushing a
+protected branch, tagging a branch that is behind its remote, deleting a
+branch with unmerged commits without
+.BR \-f ,
+and finishing (or deleting the current branch) with uncommitted changes.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+When set, messages are not colored.
+.SH FILES
+.TP
+.I <prefix>/share/git-workflow/git-workflow-aliases
+A git config file of short aliases
+.RB ( "git s" ,
+.BR "git lg" ,
+\&...). Include it from
+.I ~/.gitconfig
+with
+.BR "git config \-\-global \-\-add include.path" .
+.SH SEE ALSO
+.BR git\-b (1),
+.BR git\-c (1),
+.BR git\-qc (1),
+.BR git\-ps (1),
+.BR git\-sync (1),
+.BR git\-rb\-pull (1),
+.BR git\-sq (1),
+.BR gitworkflows (7)
+.PP
+https://github.com/joshua-hvmn/git-workflow

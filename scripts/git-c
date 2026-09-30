@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -7,13 +7,14 @@
 # Modify & distribute freely.
 set -eu
 
-# Find script dir
-if [ -z "${GIT_SCRIPTS_HOME_DIR:-}" ]; then
-    GIT_SCRIPTS_HOME_DIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
-    export GIT_SCRIPTS_HOME_DIR
+# Where lib/ lives. `make install` fills in this line with the installed path;
+# in a checkout (or a `make link` install) lib/ sits next to the real script.
+GIT_WORKFLOW_LIBDIR=
+if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
+    GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
 fi
-# Source util script
-. "$GIT_SCRIPTS_HOME_DIR/lib/git-core-utils.sh"
+. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
 
 # MAIN
+detect_protected_branch "commit"
 commit_function "$@"

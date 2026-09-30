@@ -4,8 +4,8 @@
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 setup() {
-    export PATH="$REPO_ROOT/scripts:$PATH"
-    unset GIT_SCRIPTS_HOME_DIR
+    # GIT_WORKFLOW_BIN runs the suite against an installed copy (make installcheck)
+    export PATH="${GIT_WORKFLOW_BIN:-$REPO_ROOT/scripts}:$PATH"
     export NO_COLOR=1
     # Never open an editor; a test that would is a failing test, not a hang
     export GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true
@@ -25,7 +25,7 @@ setup() {
     git init -q --bare "$REMOTE_DIR"
     git clone -q "$REMOTE_DIR" "$SEED" 2>/dev/null
     (
-        cd "$SEED"
+        cd "$SEED" || exit 1
         echo a >a
         echo b >b
         git add .
@@ -35,7 +35,7 @@ setup() {
         git push -q origin v1.0.0
     )
     git clone -q "$REMOTE_DIR" "$WORK"
-    cd "$WORK"
+    cd "$WORK" || return 1
 }
 
 # Make the local next branch exist (a fresh clone only has main)
@@ -54,7 +54,7 @@ commit_change() {
 # Advance a branch on the remote behind our back: remote_commit <branch> <file>
 remote_commit() {
     (
-        cd "$SEED"
+        cd "$SEED" || exit 1
         git fetch -q origin
         git switch -q -C "$1" "origin/$1"
         echo upstream >>"$2"
@@ -89,4 +89,39 @@ no_local_branch() {
 
 not_ancestor() {
     ! git merge-base --is-ancestor "$1" "$2"
+}
+
+no_merge_in_progress() {
+    ! git rev-parse --verify --quiet MERGE_HEAD >/dev/null
+}
+
+# Put a fake `gh` first on PATH. `gh pr view` prints $1 (an existing PR's URL)
+# or fails when no URL is given; every other call is logged to $GH_LOG.
+fake_gh() {
+    local bin="$BATS_TEST_TMPDIR/bin"
+    GH_LOG="$BATS_TEST_TMPDIR/gh.log"
+    : >"$GH_LOG"
+    mkdir -p "$bin"
+    # shellcheck disable=SC2016 # the generated script expands these
+    {
+        echo '#!/bin/sh'
+        echo 'if [ "$1 $2" = "pr view" ]; then'
+        if [ -n "${1:-}" ]; then
+            echo "    echo '$1'; exit 0"
+        else
+            echo '    exit 1'
+        fi
+        echo 'fi'
+        echo "echo \"\$*\" >>'$GH_LOG'"
+    } >"$bin/gh"
+    chmod +x "$bin/gh"
+    export PATH="$bin:$PATH" GH_LOG
+}
+
+squash_editor() {
+    local ed="$BATS_TEST_TMPDIR/squash_editor"
+    # shellcheck disable=SC2016 # the generated script expands these
+    printf '#!/bin/sh\nsed "2,\\$s/^pick/fixup/" "$1" >"$1.tmp" && mv "$1.tmp" "$1"\n' >"$ed"
+    chmod +x "$ed"
+    printf '%s' "$ed"
 }
