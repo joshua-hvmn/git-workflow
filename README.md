@@ -282,6 +282,18 @@ make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
 `make install` never touches `$HOME` or `~/.gitconfig`. Release tarballs include the tests.
 [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) is a template for an AUR package.
 
+The publish job runs in a `release` environment, so a copy of the workflow needs one
+(Settings → Environments), with:
+
+- a required reviewer (every release waits for approval) and a deployment tag rule `v*`
+- secrets `GPG_PRIVATE_KEY` (an armored signing subkey export) and `GPG_PASSPHRASE`
+- variable `GPG_FINGERPRINT` (that subkey's fingerprint), with the primary key published on
+  keyserver.ubuntu.com
+
+Before signing, it fetches the published key, so extending the subkey's expiry only needs
+`gpg --send-keys`, not a new secret. It fails if the published key can't verify the
+signature, and warns 60 days before the key expires.
+
 ## Development
 
 ```sh
