@@ -30,6 +30,9 @@
 - Arch Linux PKGBUILD template in `packaging/arch/`.
 - CI runs on macOS with its stock Bash 3.2 and tests an installed copy.
 - Release notes come from this changelog.
+- Release tarballs are GPG-signed ('.sig') and carry a GitHub build provenance attestation.
+  Publishing waits for approval in the 'release' environment, which holds the signing key;
+  building and testing run in a separate job that has no access to it.
 
 ### Fixed
 

@@ -35,12 +35,37 @@ Git runs any `git-<name>` executable on your `PATH` as `git <name>`. That's how 
 **From a release** (what a distro package does):
 
 ```sh
-curl -LO https://github.com/joshua-hvmn/git-workflow/releases/latest/download/git-workflow-vX.Y.Z.tar.gz
-tar xzf git-workflow-vX.Y.Z.tar.gz && cd git-workflow-vX.Y.Z
+version=vX.Y.Z
+project=git-workflow
+username=joshua-hvmn
+repo=$username/$project
+fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD
+base=https://github.com/$repo/releases/download/$version
+package=$project-$version
+tarball=$package.tar.gz
+signature=$tarball.sig
+curl -LO "$base/$tarball" -LO "$base/$signature"
+
+# GPG: Fetch the key and verify, you can skip this if you have gh, use the command below this block.
+gpg --keyserver keyserver.ubuntu.com --recv-keys "$fingerprint"
+gpg --verify "$signature" "$tarball"
+```
+
+_Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
+
+**Signing key**: `1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A`
+**Master fingerprint / identity**: `4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD`
+The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA key" line
+shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
+this architecture exists is so I can revoke the signing key for this repository (only) if it is compromised.
+
+```sh
+tar xzf "$tarball" && cd "$package" # extract
 make check                          # optional: run the test suite (needs bats-core)
 sudo make install                   # into /usr/local
-make install PREFIX=~/.local        # or just for you, no sudo
 ```
+
+Or, locally: `make install PREFIX=~/.local`
 
 **From a clone, for hacking on it:**
 
@@ -271,3 +296,15 @@ isolated. `tests/regressions.bats` has one test per fixed bug, grouped by releas
 `tests/flows.bats` covers the full flows and guardrails. CI runs lint, the suite, and
 `installcheck` on Linux and macOS with its stock Bash 3.2, on every push to a flow branch
 and on pull requests.
+
+The publish job runs in a `release` environment, so a copy of the workflow needs one
+(Settings → Environments), with:
+
+- a required reviewer (every release waits for approval) and a deployment tag rule `v*`
+- secrets `GPG_PRIVATE_KEY` (an armored signing subkey export) and `GPG_PASSPHRASE`
+- variable `GPG_FINGERPRINT` (that subkey's fingerprint), with the primary key published on
+  keyserver.ubuntu.com
+
+Before signing, it fetches the published key, so extending the subkey's expiry only needs
+`gpg --send-keys`, not a new secret. It fails if the published key can't verify the
+signature, and warns 60 days before the key expires.
