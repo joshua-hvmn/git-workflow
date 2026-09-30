@@ -84,7 +84,7 @@ jobs:
       - name: Release notes
         run: |
           version="${GITHUB_REF_NAME%%-*}"
-          awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md >notes.md
+          awk -v v="$version" '/^## / { on = ($2 == v); next } on' CHANGELOG.md >dist/notes.md
           if [ -s dist/notes.md ]; then
             echo "Using the CHANGELOG section for $version"
           else
