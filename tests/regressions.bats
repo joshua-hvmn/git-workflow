@@ -491,3 +491,111 @@ load test_helper
     [[ "$output" == *"already exists on 'origin'"* ]]
     no_local_branch foo
 }
+
+# --- v1.4.2 ------------------------------------------------------------------
+
+@test "finish topic: after a squash it stops instead of merging the old commits" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a c1
+    commit_change a c2
+    git push -q origin foo
+    GIT_SEQUENCE_EDITOR=$(squash_editor) git sq >/dev/null 2>&1
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git ps force"* ]]
+    [ "$(git rev-parse next)" = "$(git rev-parse origin/next)" ]
+    [ "$(git rev-list --count origin/next..foo)" -eq 1 ]
+}
+
+@test "qc p: after a squash it refuses to pull the old commits back" {
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+    GIT_SEQUENCE_EDITOR=$(squash_editor) git sq >/dev/null 2>&1
+    echo more >>b
+    git add b
+
+    run git qc p more
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git ps force"* ]]
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 2 ]
+    [ "$(git log -1 --format=%s origin/feat)" = "c2" ]
+}
+
+@test "sync: after a squash it refuses to pull the old commits back" {
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+    GIT_SEQUENCE_EDITOR=$(squash_editor) git sq >/dev/null 2>&1
+
+    run git sync
+    [ "$status" -ne 0 ]
+    [ "$(git rev-list --count origin/main..HEAD)" -eq 1 ]
+}
+
+@test "finish topic: merging next in to fix a conflict, then finishing again, works" {
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    remote_commit next a
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+
+    # what finish tells you to do: merge the dev branch in and resolve
+    git merge origin/next >/dev/null 2>&1 || true
+    printf 'a\nresolved\n' >a
+    git add a
+    git commit -q --no-edit
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    no_rebase_in_progress
+    git fetch -q --prune origin
+    [ "$(git log -1 --format=%s origin/next)" = "Merge branch 'foo' into next" ]
+    remote_lacks_ref refs/heads/foo
+}
+
+@test "finish release: merging main in to fix a conflict, then finishing again, works" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    remote_commit main a
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+
+    git merge origin/main >/dev/null 2>&1 || true
+    printf 'a\nresolved\n' >a
+    git add a
+    git commit -q --no-edit
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    no_rebase_in_progress
+    git fetch -q origin
+    [ "$(git rev-parse 'v1.1.0^{commit}')" = "$(git rev-parse origin/main)" ]
+}
+
+@test "start: an invalid name fails before switching branches" {
+    git switch -qc feat
+    run git b start topic "bad..name"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"not a valid branch name"* ]]
+    [ "$(git branch --show-current)" = "feat" ]
+}
+
+@test "strict: a release prefix without a trailing slash still sees the open release" {
+    git config workflow.strict true
+    git config workflow.releasePrefix release-
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    git switch -q next
+
+    run git b start release v1.2.0 </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"one release branch at a time"* ]]
+    no_local_branch release-v1.2.0
+}

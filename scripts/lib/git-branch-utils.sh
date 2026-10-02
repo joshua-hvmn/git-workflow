@@ -46,6 +46,11 @@ check_for_branch() {
 
 # Other release branches, local or remote (gitflow allows one at a time)
 other_release_branches() {
+    local pattern="$RELEASE_PREFIX"
+    case "$pattern" in
+    */) ;;
+    *) pattern="$pattern*" ;;
+    esac
     {
         git for-each-ref --format='%(refname:short)' "refs/heads/${RELEASE_PREFIX}"
         git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/${RELEASE_PREFIX}"

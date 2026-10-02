@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.4.2
+
+### Fixed
+
+- Pulling a topic or release branch no longer undoes work. After `git sq`, `git b finish`,
+  `git qc p` and `git sync` stop and say to run `git ps force` instead of rebasing the old
+  commits back in. After merging the dev or main branch in to fix a `finish` conflict,
+  running `finish` again no longer starts a rebase that repeats the conflict.
+- `git b start` checks the branch name before switching to the base branch.
+- A `workflow.releasePrefix` without a trailing slash (like `release-`) now finds open
+  release branches.
+- The release workflow accepts a `VERSION` of `1.2.3` as well as `v1.2.3`, like
+  `git b pre` and `git b finish` do.
+- Removed a reference to a PKGBUILD template in the README that is now delayed.
+
+## v1.4.1
+
+### Fixed
+
+- Release notes now come from the CHANGELOG section. v1.4.0 wrote them to the wrong path,
+  so its release used notes generated from commits.
+
 ## v1.4.0
 
 ### Changed
