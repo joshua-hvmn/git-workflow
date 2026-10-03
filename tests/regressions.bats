@@ -584,6 +584,7 @@ load test_helper
     run git b start topic "bad..name"
     [ "$status" -ne 0 ]
     [[ "$output" == *"not a valid branch name"* ]]
+    [[ "$output" != *"Starting topic branch"* ]]
     [ "$(git branch --show-current)" = "feat" ]
 }
 

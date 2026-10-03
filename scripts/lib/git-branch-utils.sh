@@ -52,8 +52,8 @@ other_release_branches() {
     *) pattern="$pattern*" ;;
     esac
     {
-        git for-each-ref --format='%(refname:short)' "refs/heads/${RELEASE_PREFIX}"
-        git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/${RELEASE_PREFIX}"
+        git for-each-ref --format='%(refname:short)' "refs/heads/$pattern"
+        git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/$pattern}"
     } | sort -u | grep -vxF "${1:-}" || true
 }
 
@@ -98,6 +98,11 @@ start_branch() {
     get_user_input "$new_branch_name" "$start_message" || return 1
     new_branch_name="$REPLY"
     full_branch_name="$prefix$new_branch_name"
+
+    if [ "$(git check-ref-format --branch "$full_branch_name" 2>/dev/null)" != "$full_branch_name" ]; then
+        err "'$full_branch_name' is not a valid branch name."
+        return 1
+    fi
 
     if [ "$new_branch_type" != "topic" ]; then
         validate_new_version "$new_branch_name" || return 1
