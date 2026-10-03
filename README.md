@@ -170,7 +170,7 @@ git b finish           # v1.2.0 on main
 ```
 
 Before tagging it fetches tags, checks the `VERSION` file, pushes any unpushed branch commits
-(after asking), refusesif the branch is behind its remote, and prints the Actions URL to
+(after asking), refuses if the branch is behind its remote, and prints the Actions URL to
 watch the run.
 
 Delete a bad prerelease with `gh release delete v1.2.0-rc.1 --cleanup-tag`.
@@ -280,7 +280,6 @@ make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
 
 `BINDIR`, `LIBDIR`, `DATADIR`, `DOCDIR` and `MANDIR` can be overridden individually.
 `make install` never touches `$HOME` or `~/.gitconfig`. Release tarballs include the tests.
-[`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) is a template for an AUR package.
 
 The publish job runs in a `release` environment, so a copy of the workflow needs one
 (Settings → Environments), with:
@@ -308,9 +307,6 @@ isolated. `tests/regressions.bats` has one test per fixed bug, grouped by releas
 `tests/flows.bats` covers the full flows and guardrails. CI runs lint, the suite, and
 `installcheck` on Linux and macOS with its stock Bash 3.2, on every push to a flow branch
 and on pull requests.
-
-The publish job runs in a `release` environment, so a copy of the workflow needs one
-(Settings → Environments), with:
 
 - a required reviewer (every release waits for approval) and a deployment tag rule `v*`
 - secrets `GPG_PRIVATE_KEY` (an armored signing subkey export) and `GPG_PASSPHRASE`

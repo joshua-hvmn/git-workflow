@@ -339,6 +339,12 @@ rb_pull_function() {
             return 1
         }
     else
+        git merge-base --is-ancestor "refs/remotes/$REMOTE/$current" "refs/heads/$current" && return 0
+        if history_rewritten "$current"; then
+            err "'$current' was rewritten after it was pushed."
+            info "Pulling would replay the old commits on top. Publish the rewrite first: git ps force"
+            return 1
+        fi
         git rebase --autostash "$REMOTE/$current"
     fi
 }
