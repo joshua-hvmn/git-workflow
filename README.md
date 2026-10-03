@@ -53,8 +53,11 @@ gpg --verify "$signature" "$tarball"
 
 _Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
 
-**Signing key**: `1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A`
-**Master fingerprint / identity**: `4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD`
+**Signing key**:
+`1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A`
+**Master fingerprint / identity**:
+`4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD`
+
 The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA key" line
 shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
 this architecture exists is so I can revoke the signing key for this repository (only) if it is compromised.
