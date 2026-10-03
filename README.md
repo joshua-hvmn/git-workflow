@@ -54,9 +54,16 @@ gpg --verify "$signature" "$tarball"
 _Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
 
 **Signing key**:
-`1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A`
+
+```
+1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A
+```
+
 **Master fingerprint / identity**:
-`4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD`
+
+```
+4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD
+```
 
 The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA key" line
 shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
@@ -68,7 +75,7 @@ make check                          # optional: run the test suite (needs bats-c
 sudo make install                   # into /usr/local
 ```
 
-Or, locally: `make install PREFIX=~/.local`
+Or, locally: `make install PREFIX="$HOME/.local"`
 
 **From a clone, for hacking on it:**
 
@@ -273,13 +280,12 @@ make check                                  # test suite (bats-core)
 make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
 ```
 
-| Path (`PREFIX=/usr`)                   | Contents                                    |
-| -------------------------------------- | ------------------------------------------- |
-| `/usr/bin/git-*`                       | the commands                                |
-| `/usr/lib/git-workflow/`               | sourced libraries and `VERSION`             |
-| `/usr/share/man/man1/git-*.1`, `man7/` | man pages (`git b --help` opens `git-b(1)`) |
-| `/usr/share/git-workflow/`             | the alias file                              |
-| `/usr/share/doc/git-workflow/`         | README, CHANGELOG, LICENSE                  |
+| Path (`PREFIX=/usr`)                   | Contents                                      |
+| -------------------------------------- | --------------------------------------------- |
+| `/usr/bin/git-*`                       | the commands                                  |
+| `/usr/share/git-workflow/`             | sourced libraries, VERSION and the alias file |
+| `/usr/share/man/man1/git-*.1`, `man7/` | man pages (`git b --help` opens `git-b(1)`)   |
+| `/usr/share/doc/git-workflow/`         | README, CHANGELOG, LICENSE                    |
 
 `BINDIR`, `LIBDIR`, `DATADIR`, `DOCDIR` and `MANDIR` can be overridden individually.
 `make install` never touches `$HOME` or `~/.gitconfig`. Release tarballs include the tests.
@@ -310,12 +316,3 @@ isolated. `tests/regressions.bats` has one test per fixed bug, grouped by releas
 `tests/flows.bats` covers the full flows and guardrails. CI runs lint, the suite, and
 `installcheck` on Linux and macOS with its stock Bash 3.2, on every push to a flow branch
 and on pull requests.
-
-- a required reviewer (every release waits for approval) and a deployment tag rule `v*`
-- secrets `GPG_PRIVATE_KEY` (an armored signing subkey export) and `GPG_PASSPHRASE`
-- variable `GPG_FINGERPRINT` (that subkey's fingerprint), with the primary key published on
-  keyserver.ubuntu.com
-
-Before signing, it fetches the published key, so extending the subkey's expiry only needs
-`gpg --send-keys`, not a new secret. It fails if the published key can't verify the
-signature, and warns 60 days before the key expires.

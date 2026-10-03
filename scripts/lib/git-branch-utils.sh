@@ -53,7 +53,7 @@ other_release_branches() {
     esac
     {
         git for-each-ref --format='%(refname:short)' "refs/heads/$pattern"
-        git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/$pattern}"
+        git for-each-ref --format='%(refname:lstrip=3)' "refs/remotes/$REMOTE/$pattern"
     } | sort -u | grep -vxF "${1:-}" || true
 }
 

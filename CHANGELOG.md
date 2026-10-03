@@ -2,6 +2,11 @@
 
 ## v1.4.2
 
+### Changed
+
+- The libraries and `VERSION` install to `share/git-workflow/` instead of `lib/git-workflow/`.
+  `make uninstall` removes both locations.
+
 ### Fixed
 
 - Pulling a topic or release branch no longer undoes work. After `git sq`, `git b finish`,
