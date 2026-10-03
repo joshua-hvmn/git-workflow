@@ -125,3 +125,9 @@ squash_editor() {
     chmod +x "$ed"
     printf '%s' "$ed"
 }
+
+no_rebase_in_progress() {
+    local dir
+    dir=$(git rev-parse --git-dir)
+    [ ! -d "$dir/rebase-merge" ] && [ ! -d "$dir/rebase-apply" ]
+}

@@ -190,6 +190,15 @@ load test_helper
     [[ "$output" == *"not newer"* ]]
 }
 
+@test "strict: a release branch that only exists on the remote blocks a second one" {
+    git config workflow.strict true
+    (cd "$SEED" && git push -q origin main:release/v1.1.0)
+    local_next
+    run git b start release v1.2.0 </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"one release branch at a time"* ]]
+}
+
 @test "an existing tag always stops start, strict or not" {
     local_next
     run git b start release v1.0.0 <<<"y"
