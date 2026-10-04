@@ -1,38 +1,48 @@
-.TH GIT-B 1 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-b \- start, prerelease, finish and delete branches following the flow
+git-workflow-branch \- start, prerelease, finish and delete branches following the flow
 .SH SYNOPSIS
-.B git b
+.B git workflow branch
 .RI [ git-branch-options ]
 .br
-.B git b start
+.B git workflow branch start
 .BR topic | release | hotfix
 .RI [ name ]
 .br
-.B git b pre
+.B git workflow branch pre
 .RI [ label | tag ]
 .RB [ \-n ]
 .RB [ \-l ]
 .br
-.B git b finish
+.B git workflow branch finish
 .RI [ branch ]
 .br
-.B git b delete
+.B git workflow branch delete
 .RI [ branch ]
 .RB [ \-y ]
 .RB [ \-f ]
 .br
-.B git b config
+.B git workflow branch config
 |
 .B help
 |
 .B version
 .SH DESCRIPTION
-With no subcommand, or one it doesn't recognise,
-.B git b
+With no subcommand, or one it doesn't recognize,
+.B git workflow branch
 runs
 .BR git\-branch (1)
 with the same arguments.
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git b" ;
+the 1.x name
+.B b
+works after
+.B git workflow
+too.
 .SH COMMANDS
 .TP
 .B start topic | release | hotfix \fR[\fIname\fR]
@@ -99,11 +109,11 @@ Show the effective settings.
 Show the installed version.
 .SH EXAMPLES
 .nf
-git b start release v1.2.0
-git b pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
-git b pre              # v1.2.0\-rc.2
-git b finish           # v1.2.0 on main, merged back into next
+git workflow branch start release v1.2.0
+git workflow branch pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
+git workflow branch pre              # v1.2.0\-rc.2
+git workflow branch finish           # v1.2.0 on main, merged back into next
 .fi
 .SH SEE ALSO
-.BR git\-workflow (7)
+.BR git\-workflow (1)
 for configuration and guardrails.

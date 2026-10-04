@@ -1,8 +1,8 @@
-.TH GIT-SQ 1 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-SQUASH 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-sq \- interactively squash the current branch's own commits
+git-workflow-squash \- interactively squash the current branch's own commits
 .SH SYNOPSIS
-.B git sq
+.B git workflow squash
 .RI [ base ]
 .SH DESCRIPTION
 Run
@@ -12,13 +12,23 @@ against
 by default the remote copy of the dev branch, or of the main branch for
 hotfix branches. Only this branch's commits are rewritten; the branch is
 never moved onto a newer base (that is what
-.BR git\-sync (1)
+.BR git\-workflow\-sync (1)
 is for), so a squash can't turn into a surprise conflict.
 .PP
 Rewriting a protected branch warns first, or stops when
 .B workflow.strict
 is true. If the squashed commits had been pushed, it says to publish with
-.BR "git ps force" .
+.BR "git workflow push force" .
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git sq" ;
+the 1.x name
+.B sq
+works after
+.B git workflow
+too.
 .SH SEE ALSO
-.BR git\-ps (1),
-.BR git\-workflow (7)
+.BR git\-workflow\-push (1),
+.BR git\-workflow (1)

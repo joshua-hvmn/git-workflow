@@ -34,23 +34,42 @@ any `git-<name>` on your `PATH` as `git <name>`; that's how `git lfs` plugs in t
 names, `git b`, `git c` and so on, are aliases you opt into, so git-workflow never takes a name
 you already use.
 
-**From a release** (what a distro package does):
+### **From a release** (manual install):
+
+#### Step 1: Download files
 
 ```sh
+# Set the version variable, you must change this variable. Set it to the version
+# you want to download. Change nothing else in this block to install git-workflow.
 version=vX.Y.Z
+
+# Set constants for download (don't change these).
+fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD   # Master fingerprint, see below
 project=git-workflow
 username=joshua-hvmn
 repo=$username/$project
-fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD
-base=https://github.com/$repo/releases/download/$version
 package=$project-$version
 tarball=$package.tar.gz
 signature=$tarball.sig
-curl -LO "$base/$tarball" -LO "$base/$signature"
+base=https://github.com/$repo/releases/download/$version
 
-# GPG: Fetch the key and verify, you can skip this if you have gh, use the command below this block.
+# Download the source code and the signature file.
+curl -LO "$base/$tarball" -LO "$base/$signature"
+```
+
+#### Step 2: Verify the tarball was signed by me.
+
+_Note: validate my master identity outside of this repository if you are paranoid._
+
+```
+# GPG: Fetch the key and verify the signature, you can skip this if you have gh,
+# use the command below this block.
 gpg --keyserver keyserver.ubuntu.com --recv-keys "$fingerprint"
-gpg --verify "$signature" "$tarball"
+if gpg --verify "$signature" "$tarball"; then
+    package_validated=true
+else
+    echo "FATAL ERROR: packaged signature failure. Do not extract this package."
+fi
 ```
 
 _Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
@@ -71,21 +90,27 @@ The tarball signing key for this repository is a subkey of my master key, so gpg
 shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
 this architecture exists is so I can revoke the signing key for this repository (only) if it is compromised.
 
+#### Step 3: Unpack and install git-workflow
+
 ```sh
-tar xzf "$tarball" && cd "$package" # extract
-make check                          # optional: run the test suite (needs bats-core)
+[[ "$package_validated" == "true" ]] && tar xzf "$tarball" && cd "$package"
+```
+
+```
 sudo make install                   # into /usr/local
 ```
 
 Or, locally: `make install PREFIX="$HOME/.local"`
 
-**From a clone, for hacking on it:**
+### **From a clone, for hacking on it:**
 
 ```sh
 git clone https://github.com/joshua-hvmn/git-workflow.git && cd git-workflow
 make link                 # symlinks the commands into ~/.local/bin; edits take effect immediately
 make unlink               # undo
 ```
+
+### Extra Installation steps:
 
 **Aliases** are opt-in, because they edit your `~/.gitconfig`:
 
@@ -105,7 +130,7 @@ your alias for each, and `man git-workflow` is the manual.
 `make uninstall` (with the same `PREFIX`) removes an install; your alias copies stay, and
 `make unaliases` stops including them. `make help` lists every target.
 
-**Upgrading from 1.x**: `make install` removes the 1.x `git-*` commands from the same `PREFIX`
+**Upgrading from v1.x**: `make install` removes the 1.x `git-*` commands from the same `PREFIX`
 (git would run them instead of the new aliases), and `git workflow aliases install` replaces the
 1.x alias include. See the [CHANGELOG](CHANGELOG.md).
 
@@ -161,7 +186,7 @@ what would happen.
 
 | Command                                       | Description                                                           |
 | --------------------------------------------- | --------------------------------------------------------------------- |
-| `git b`                                       | `git branch` (anything unrecognised passes through, e.g. `git b -vv`) |
+| `git b`                                       | `git branch` (anything unrecognized passes through, e.g. `git b -vv`) |
 | `git b start <topic\|release\|hotfix> [name]` | start a branch from the right base and push it                        |
 | `git b pre [label\|tag] [-n] [-l]`            | tag the release branch as a prerelease and push the tag               |
 | `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |

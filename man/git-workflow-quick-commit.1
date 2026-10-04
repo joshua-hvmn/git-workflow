@@ -1,14 +1,14 @@
-.TH GIT-QC 1 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-QUICK-COMMIT 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-qc \- commit, sync with the remote branch, and optionally push
+git-workflow-quick\-commit \- commit, sync with the remote branch, and optionally push
 .SH SYNOPSIS
-.B git qc
+.B git workflow quick\-commit
 .RB [ p | \-p | \-\-push ]
 .RB [ \-\- ]
 .RI [ message ...]
 .SH DESCRIPTION
 Like
-.BR git\-c (1),
+.BR git\-workflow\-commit (1),
 then, if the branch exists on the remote, rebase it onto the remote copy.
 With
 .BR p ,
@@ -27,7 +27,17 @@ and
 select push mode; the word "push" starts the message like any other. Use
 .B \-\-
 before a message whose first word is "p".
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git qc" ;
+the 1.x name
+.B qc
+works after
+.B git workflow
+too.
 .SH SEE ALSO
-.BR git\-c (1),
-.BR git\-ps (1),
-.BR git\-workflow (7)
+.BR git\-workflow\-commit (1),
+.BR git\-workflow\-push (1),
+.BR git\-workflow (1)
