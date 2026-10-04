@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
+# git workflow sync: fetch everything, then bring a branch up to date
+# bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -6,18 +8,10 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
-set -eu
-
-# Where lib/ lives. `make install` fills in this line with the installed path;
-# in a checkout (or a `make link` install) lib/ sits next to the real script.
-GIT_WORKFLOW_LIBDIR=
-if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
-    GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
-fi
-. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
+. "$GIT_WORKFLOW_DATADIR/core.sh"
 
 # MAIN
 info "Fetching all remotes and pruning dead branches..."
 git fetch --all --prune --tags
-__SYNCED=1 # already fetched, stop rb_pull_function from fetching again
+__SYNCED=1 # already fetched, stops rb_pull_function from fetching again
 rb_pull_function "$@"

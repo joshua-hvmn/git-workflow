@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
+# git workflow push: sync with the remote branch, then push
+# bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -6,15 +8,7 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
-set -eu
-
-# Where lib/ lives. `make install` fills in this line with the installed path;
-# in a checkout (or a `make link` install) lib/ sits next to the real script.
-GIT_WORKFLOW_LIBDIR=
-if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
-    GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
-fi
-. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
+. "$GIT_WORKFLOW_DATADIR/core.sh"
 
 require_branch
 PS_MODE="default"
@@ -28,7 +22,7 @@ force | -f | -F | --force | --force-with-lease)
     ;;
 esac
 if [ "$#" -gt 0 ]; then
-    err "unexpected argument '$1'. usage: git ps [force]"
+    err "unexpected argument '$1'. usage: $(wf_cmd push "[force]")"
     exit 1
 fi
 
@@ -37,8 +31,8 @@ default)
     detect_protected_branch "push"
     sync_remote
     if history_rewritten "$working_branch"; then
-        err "'$working_branch' was rewritten (git sq, rebase, or amend) after it was pushed."
-        info "Syncing would replay the old commits on top. Publish the rewrite with: git ps force"
+        err "'$working_branch' was rewritten (squash, rebase, or amend) after it was pushed."
+        info "Syncing would replay the old commits on top. Publish the rewrite with: $(wf_cmd push force)"
         exit 1
     fi
     conditional_rb_pull
