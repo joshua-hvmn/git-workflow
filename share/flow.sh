@@ -14,10 +14,10 @@ fi
 __BRANCH_UTILS_LOADED=1
 
 if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
-    . "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
+    . "$GIT_WORKFLOW_DATADIR/core.sh"
 fi
 if [ -z "${__RELEASE_UTILS_LOADED:-}" ]; then
-    . "$GIT_WORKFLOW_LIBDIR/git-release-utils.sh"
+    . "$GIT_WORKFLOW_DATADIR/release.sh"
 fi
 
 # FUNCTIONS
@@ -67,7 +67,7 @@ start_branch() {
     local start_message="Enter new topic branch name:"
 
     if [ -z "$start_mode" ]; then
-        err "usage: git b start <topic|hotfix|release> [branch-name]"
+        err "usage: $(wg_cmd branch start "<topic|hotfix|release> [branch-name]")"
         return 1
     fi
 
@@ -157,9 +157,9 @@ finish_push_failed() {
 
     err "push to '$REMOTE' was rejected; nothing was published."
     info "Locally, $refs and tag $version are ahead of '$REMOTE'. To retry the push:"
-    info "  git push --atomic $REMOTE $refs refs/tags/$version && git b delete $branch"
+    info "  git push --atomic $REMOTE $refs refs/tags/$version && $(wf_cmd branch delete "$branch")"
 
-    if yes_no "Roll back the local merge and tag instead (then fix the cause and run 'git b finish' again)?"; then
+    if yes_no "Roll back the local merge and tag instead (then fix the cause and run '$(wf_cmd branch finish)' again)?"; then
         finish_rollback "$branch" "$version" "$main_before" "$dev_before" || return 1
         info "Rolled back. You are on '$branch' again."
     fi
@@ -203,14 +203,14 @@ finish_topic() {
         err "merging '$branch' into '$DEV_BRANCH' conflicted."
         finish_rollback "$branch" "" "" "$dev_before" || return 1
         info "Rolled back; you are on '$branch'. Bring in the latest '$DEV_BRANCH'"
-        info "(git merge $REMOTE/$DEV_BRANCH), resolve the conflicts there, then run 'git b finish' again."
+        info "(git merge $REMOTE/$DEV_BRANCH), resolve the conflicts there, then run '$(wf_cmd branch finish)' again."
         return 1
     fi
 
     if ! git push "$REMOTE" "$DEV_BRANCH"; then
         err "push to '$REMOTE' was rejected; nothing was published."
         finish_rollback "$branch" "" "" "$dev_before" || return 1
-        info "Rolled back; you are on '$branch'. If someone pushed to '$DEV_BRANCH' first, run 'git b finish' again."
+        info "Rolled back; you are on '$branch'. If someone pushed to '$DEV_BRANCH' first, run '$(wf_cmd branch finish)' again."
         info "If '$DEV_BRANCH' only accepts pull requests: git config workflow.finishTopic pr"
         return 1
     fi
@@ -227,7 +227,7 @@ finish_release() {
     check_version_file "$branch" "$version" finish || return 1
 
     if [ -z "$(prerelease_tags_for "$version")" ]; then
-        note "No prereleases were cut for $version (git b pre). Releasing untested artifacts."
+        note "No prereleases were cut for $version ($(wf_cmd branch pre)). Releasing untested artifacts."
     else
         note "Prereleases for $version: $(prerelease_tags_for "$version" | tr '\n' ' ')"
     fi
@@ -254,7 +254,7 @@ finish_release() {
         err "merging '$branch' into '$MAIN_BRANCH' conflicted."
         finish_rollback "$branch" "" "$main_before" || return 1
         info "Rolled back; you are on '$branch'. Bring in the latest '$MAIN_BRANCH'"
-        info "(git merge $REMOTE/$MAIN_BRANCH), resolve the conflicts there, then run 'git b finish' again."
+        info "(git merge $REMOTE/$MAIN_BRANCH), resolve the conflicts there, then run '$(wf_cmd branch finish)' again."
         return 1
     fi
     if ! git tag -a "$version" -m "$type: $version"; then
@@ -267,7 +267,7 @@ finish_release() {
     if [ "$TRUNK_MODE" -eq 0 ]; then
         if ! rb_pull_function "$DEV_BRANCH"; then
             finish_rollback "$branch" "$version" "$main_before" || return 1
-            info "Rolled back; you are on '$branch'. Fix '$DEV_BRANCH' (see above), then run 'git b finish' again."
+            info "Rolled back; you are on '$branch'. Fix '$DEV_BRANCH' (see above), then run '$(wf_cmd branch finish)' again."
 
             return 1
         fi
@@ -275,12 +275,12 @@ finish_release() {
 
         if ! git merge --ff-only "$MAIN_BRANCH" 2>/dev/null && ! git merge --no-edit "$MAIN_BRANCH"; then
             err "back-merge of $MAIN_BRANCH into $DEV_BRANCH conflicted."
-            if yes_no "Roll back the release merge and tag (then fix the cause and run 'git b finish' again)?"; then
+            if yes_no "Roll back the release merge and tag (then fix the cause and run '$(wf_cmd branch finish)' again)?"; then
                 finish_rollback "$branch" "$version" "$main_before" "$dev_before" || return 1
                 info "Rolled back. You are on '$branch' again."
             else
                 info "Resolve the conflicts on $DEV_BRANCH and commit, then publish with:"
-                info "  git push --atomic $REMOTE $MAIN_BRANCH $DEV_BRANCH refs/tags/$version && git b delete $branch"
+                info "  git push --atomic $REMOTE $MAIN_BRANCH $DEV_BRANCH refs/tags/$version && $(wf_cmd branch delete "$branch")"
             fi
             return 1
         fi
@@ -354,7 +354,7 @@ delete_branch() {
         -y | --yes | --y | -d | --d | --delete) no_prompt=1 ;;
         -f | --force | -D) force=1 ;;
         -*)
-            err "unknown option: $1. usage: git b delete [branch] [-y] [-f]"
+            err "unknown option: $1. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
             return 1
             ;;
         *)
@@ -364,7 +364,7 @@ delete_branch() {
                 case "$1" in
                 y | yes | d) no_prompt=1 ;;
                 *)
-                    err "too many arguments. usage: git b delete [branch] [-y] [-f]"
+                    err "too many arguments. usage:$(wf_cmd branch delete "[branch] [-y] [-f]")"
                     return 1
                     ;;
                 esac
@@ -398,7 +398,7 @@ delete_branch() {
             git rev-parse --verify --quiet "$ref" >/dev/null || continue
             if [ -n "$(unmerged_commits "$ref" "$branch")" ]; then
                 err "'${ref#refs/*/}' has commits that aren't merged into $DEV_BRANCH or $MAIN_BRANCH."
-                info "Delete it anyway with: git b delete $branch -f"
+                info "Delete it anyway with: $(wf_cmd branch delete "$branch" -f)"
                 return 1
             fi
         done
