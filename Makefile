@@ -19,12 +19,12 @@
 # Requires GNU make 3.81 or newer (macOS ships 3.81), a POSIX shell, awk and
 # install(1). Nothing here needs GNU coreutils.
 # ==============================================================================
- 
+
 NAME    := git-workflow
 VERSION := $(shell cat VERSION)
- 
+
 # --- Tools --------------------------------------------------------------------
- 
+
 SHELL           := /bin/sh
 INSTALL         ?= install
 INSTALL_PROGRAM ?= $(INSTALL) -m 755
@@ -35,11 +35,11 @@ GIT             ?= git
 BATS            ?= bats
 SHELLCHECK      ?= shellcheck
 MANDOC          ?= mandoc
- 
+
 # --- Install locations --------------------------------------------------------
 # Everything but the program is sourced Bash or text, the same on every
 # architecture, so it goes in share/ (lib/ is for architecture-dependent files).
- 
+
 DESTDIR ?=
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
@@ -47,16 +47,16 @@ DATADIR ?= $(PREFIX)/share/$(NAME)
 DOCDIR  ?= $(PREFIX)/share/doc/$(NAME)
 MANDIR  ?= $(PREFIX)/share/man
 LINKDIR ?= $(HOME)/.local/bin
- 
+
 # --- Files --------------------------------------------------------------------
- 
+
 PROGRAM  := bin/$(NAME)
 LIBS     := $(wildcard share/*.sh) VERSION
 COMMANDS := $(wildcard share/commands/*.sh)
 ALIASES  := $(wildcard share/aliases/*)
 MAN1     := $(wildcard man/*.1)
 DOCS     := README.md CHANGELOG.md LICENSE
- 
+
 # What 1.x installed and 2.0 doesn't: the git-* commands, their libraries
 # (in DATADIR since 1.4.2, in PREFIX/lib/git-workflow before), the alias file
 # and their man pages. install and uninstall both clear them away, because
@@ -64,29 +64,29 @@ DOCS     := README.md CHANGELOG.md LICENSE
 OLD_COMMANDS := git-b git-c git-ps git-qc git-rb-pull git-sq git-sync
 OLD_LIBS     := git-branch-utils.sh git-core-utils.sh git-release-utils.sh
 OLD_LIBDIR   := $(PREFIX)/lib/$(NAME)
-OLD_MAN1     := $(addsuffix .1,$(OLD_COMMANDS)) 
+OLD_MAN1     := $(addsuffix .1,$(OLD_COMMANDS))
 
 # `make dist` archives this ref under this name (the release workflow passes the tag)
 DIST_REF  ?= HEAD
 DIST_NAME ?= $(NAME)-$(VERSION)
- 
+
 # --- Guards -------------------------------------------------------------------
 # Checked before any target runs. Paths are quoted everywhere, so spaces are fine.
- 
+
 # Only bash expands the ~ in PREFIX=~/.local. fish, zsh and sh pass it through,
 # and the recipes would then create a directory literally named "~" in this one.
-ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(LIBDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(LINKDIR)),)
+ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(LINKDIR)),)
   $(error A path contains a "~" that your shell did not expand. Use $$HOME instead: PREFIX="$$HOME/.local")
 endif
- 
-# LIBDIR is written into the installed commands, which can run from any directory.
-ifneq ($(patsubst /%,/,$(firstword $(LIBDIR))),/)
-  $(error LIBDIR must be an absolute path, because the installed commands use it to find their libraries. It is "$(LIBDIR)")
+
+# DATADIR is written into the installed program, which can run from any directory.
+ifneq ($(patsubst /%,/,$(firstword $(DATADIR))),/)
+  $(error DATADIR must be an absolute path, because the installed program uses it to find the rest. It is "$(DATADIR)")
 endif
- 
+
 # --- Output -------------------------------------------------------------------
 # One aligned line per action, the convention of git's and Linux's Makefiles.
- 
+
 V ?= 0
 ifeq ($(V),1)
   Q   :=
@@ -95,16 +95,16 @@ else
   Q   := @
   say := printf '  %-8s %s\n'
 endif
- 
+
 # --- Recipe helpers -----------------------------------------------------------
- 
+
 # $(call install_files,DIR,COMMAND,FILES): install each file into DESTDIR/DIR
 install_files = for f in $(3); do \
 		dest="$(DESTDIR)$(1)/$$(basename "$$f")"; \
 		$(say) INSTALL "$$dest"; \
 		$(2) "$$f" "$$dest" || exit 1; \
 	done
- 
+
 # $(call remove_files,DIR,NAMES): remove each name from DESTDIR/DIR, reporting
 # only the files that were there
 remove_files = for f in $(2); do \
@@ -127,29 +127,29 @@ remove_1x = \
 	$(call remove_files,$(MANDIR)/man1,$(OLD_MAN1)); \
 	$(call remove_files,$(MANDIR)/man7,$(NAME).7); \
 	$(call remove_dir,$(OLD_LIBDIR))
- 
+
 # $(call path_note,DIR): after a real (unstaged) install into DIR, say when the
-# commands can't be found, or when another copy earlier on PATH runs instead
+# program can't be found, or when another copy earlier on PATH runs instead
 path_note = [ -n "$(DESTDIR)" ] || { \
-		found=$$(command -v $(PROBE) || true); \
+		found=$$(command -v $(NAME) || true); \
 		case $$found in \
-		"$(1)/$(PROBE)") ;; \
+		"$(1)/$(NAME)") ;; \
 		"") echo "note: $(1) is not on your PATH" ;; \
 		*) echo "note: $$found comes first on your PATH, so it runs instead" ;; \
 		esac; \
 	}
- 
+
 # --- Targets ------------------------------------------------------------------
- 
+
 # No implicit rules: nothing here is built from anything else
 .SUFFIXES:
- 
+
 .PHONY: all help install uninstall aliases unaliases link unlink \
 	lint test check installcheck dist clean
- 
+
 all:
 	@:
- 
+
 help:
 	@echo "$(NAME) $(VERSION)"
 	@$(AWK) 'BEGIN { FS = ":.*## " } \
@@ -162,9 +162,9 @@ help:
 		BINDIR  '$(BINDIR)'  DATADIR '$(DATADIR)' \
 		DOCDIR  '$(DOCDIR)'  MANDIR  '$(MANDIR)' \
 		LINKDIR '$(LINKDIR)'
- 
+
 ##@ Install
- 
+
 install: all ## Install the program, its libraries and commands, the man pages and docs
 	$(Q)$(remove_1x)
 	$(Q)$(MKDIR_P) "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/commands" \
@@ -283,3 +283,4 @@ clean: ## Remove what dist wrote
 	$(Q)for f in "$(DIST_NAME).tar.gz" "$(DIST_NAME).tar.gz.sha256"; do \
 		if [ -e "$$f" ]; then $(say) RM "$$f"; $(RM) "$$f" || exit 1; fi; \
 	done
+
