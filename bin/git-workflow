@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Joshua Haveman
+#
+# This software is released under the MIT License, and is provided as is, without warranty.
+# Modify & distribute freely.
+#
+# git workflow <command> [<args>]
+#
+# The one program git-workflow puts on PATH; git runs it as `git workflow`.
+# It finds share/, resolves <command> (the 1.x short names work too) and
+# sources share/commands/<command>.sh, which runs with the remaining arguments.
+
+set -eu
+
+# Where share/ lives. `make install` fills in this line with the installed
+# path; in a checkout (or a `make link` install) it's ../share from the real
+# script.
+GIT_WORKFLOW_DATADIR=
+if [ -z "$GIT_WORKFLOW_DATADIR" ]; then
+    GIT_WORKFLOW_DATADIR=$(dirname -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")")/share
+fi
+. "$GIT_WORKFLOW_DATADIR/core.sh"
+
+# The middle column is your alias for each command, if you have one
+workflow_usage() {
+    local cmd summary alias name
+    printf 'usage: git workflow <command> [<args>]\n\n'
+    while IFS='|' read -r cmd summary; do
+        alias=""
+        if name=$(wf_alias_for "$cmd"); then
+            alias="git $name"
+        fi
+        printf '  %-14s %-12s %s\n' "$cmd" "$alias" "$summary"
+    done <<'EOF'
+branch|start, prerelease, finish and delete branches
+commit|commit with the message as plain words
+quick-commit|commit, sync with the remote branch, optionally push
+push|sync with the remote branch, then push
+sync|fetch everything, then bring a branch up to date
+pull|switch to a branch and bring it up to date
+squash|squash the current branch's own commits
+aliases|set up, list or remove your aliases (the middle column)
+EOF
+    printf '\n  %-27s %s\n' "help [<command>]" "this list, or a command's manual page"
+    printf '  %-27s %s\n' "version" "the installed version"
+    printf '\nThe 1.x names work here too: b, c, qc, ps, sq, rb-pull.\n'
+}
+
+case "${1:-}" in
+'')
+    workflow_usage >&2
+    exit 1
+    ;;
+help | -h)
+    if [ -z "${2:-}" ]; then
+        workflow_usage
+        exit 0
+    fi
+    cmd=$(wf_resolve "$2") || {
+        err "there is no git workflow command '$2'. See: git workflow help"
+        exit 1
+    }
+    exec man "git-workflow-$cmd"
+    ;;
+--help)
+    exec man git-workflow
+    ;;
+version | --version | -V)
+    printf 'git-workflow %s\n' "$(wf_version)"
+    exit 0
+    ;;
+esac
+
+cmd=$(wf_resolve "$1") || {
+    err "'$1' is not a git workflow command. See: git workflow help"
+    exit 1
+}
+shift
+# Like git: --help opens the manual page, -h (where a command has it) the usage
+if [ "${1:-}" = --help ]; then
+    exec man "git-workflow-$cmd"
+fi
+# shellcheck source=/dev/null # each command file is checked on its own
+. "$GIT_WORKFLOW_DATADIR/commands/$cmd.sh"

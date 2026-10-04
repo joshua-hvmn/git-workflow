@@ -1,0 +1,22 @@
+.TH GIT-WORKFLOW-SYNC 1 2026-10-03 git-workflow "git-workflow manual"
+.SH NAME
+git-workflow-sync \- fetch everything, then bring a branch up to date
+.SH SYNOPSIS
+.B git workflow sync
+.RI [ branch ]
+.SH DESCRIPTION
+Run
+.B git fetch \-\-all \-\-prune \-\-tags
+and then do what
+.BR git\-workflow\-pull (1)
+does for
+.I branch
+(default: the current branch).
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git sync" .
+.SH SEE ALSO
+.BR git\-workflow\-pull (1),
+.BR git\-workflow (1)

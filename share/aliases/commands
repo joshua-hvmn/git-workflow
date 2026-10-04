@@ -1,0 +1,16 @@
+# git-workflow: short names for its commands, the names they had in 1.x.
+#
+# `git workflow aliases install` copied this file to
+# ~/.config/git-workflow/aliases/commands and included it from ~/.gitconfig.
+# This copy is yours: rename, add or delete aliases. Messages and
+# `git workflow help` use whatever names you give them.
+# `git workflow aliases reset commands` restores the default.
+[alias]
+    b = workflow branch
+    c = workflow commit
+    qc = workflow quick-commit
+    ps = workflow push
+    sq = workflow squash
+    sync = workflow sync
+    rb-pull = workflow pull
+    wf = workflow

@@ -1,28 +1,15 @@
-.TH GIT-WORKFLOW 7 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow \- git subcommands for git flow and trunk flow, with SemVer releases and guardrails
+git-workflow \- git flow and trunk flow, with SemVer releases and guardrails
 .SH SYNOPSIS
-.B git b
-.RI [ subcommand ]
+.B git workflow
+.I command
+.RI [ args ]
 .br
-.B git c
-.RI [ message ]
+.B git workflow help
+.RI [ command ]
 .br
-.B git qc
-.RB [ p ]
-.RI [ message ]
-.br
-.B git ps
-.RB [ force ]
-.br
-.B git sync
-.RI [ branch ]
-.br
-.B git rb\-pull
-.RI [ branch ]
-.br
-.B git sq
-.RI [ base ]
+.B git workflow version
 .SH DESCRIPTION
 git-workflow makes a branching model the default path.
 .PP
@@ -56,12 +43,87 @@ everything starts from and merges into
 .BR main .
 .PP
 Release and hotfix versions are SemVer with a leading "v".
-.B git b pre
+.B git workflow branch pre
 tags a release branch as
 .I vX.Y.Z\-rc.N
 so a tag-triggered CI workflow can publish a prerelease before anything
 reaches
 .BR main .
+.PP
+Every command has a name, and the 1.x commands' short names work too:
+.B git workflow b
+is
+.BR "git workflow branch" .
+.SH COMMANDS
+.TP
+.B branch \fR(\fBb\fR)
+Start, prerelease, finish and delete branches following the flow;
+anything else goes to
+.BR git\-branch (1).
+See
+.BR git\-workflow\-branch (1).
+.TP
+.B commit \fR(\fBc\fR)
+Commit with the message as plain words.
+See
+.BR git\-workflow\-commit (1).
+.TP
+.B quick\-commit \fR(\fBqc\fR)
+Commit, sync with the remote branch, and optionally push.
+See
+.BR git\-workflow\-quick\-commit (1).
+.TP
+.B push \fR(\fBps\fR)
+Sync with the remote branch, then push.
+See
+.BR git\-workflow\-push (1).
+.TP
+.B sync
+Fetch everything, then bring a branch up to date.
+See
+.BR git\-workflow\-sync (1).
+.TP
+.B pull \fR(\fBrb\-pull\fR)
+Switch to a branch and bring it up to date with the remote.
+See
+.BR git\-workflow\-pull (1).
+.TP
+.B squash \fR(\fBsq\fR)
+Interactively squash the current branch's own commits.
+See
+.BR git\-workflow\-squash (1).
+.TP
+.B aliases
+Set up, list, reset or remove the alias sets. See
+.BR git\-workflow\-aliases (1).
+.TP
+.B help \fR[\fIcommand\fR]
+List the commands, with your alias for each, or open a command's manual page.
+.TP
+.B version
+Show the installed version.
+.SH ALIASES
+git-workflow installs one program,
+.BR git\-workflow ,
+so its commands never take a name you already use.
+.B git workflow aliases install
+gives them short names again
+.RB ( "git b" ,
+.BR "git c" ,
+\&...) by copying an alias file into
+.I ~/.config/git\-workflow/aliases/
+and including it from
+.IR ~/.gitconfig .
+That copy is yours to edit: rename, add or delete aliases, and messages and
+.B git workflow help
+use the names you choose.
+.PP
+.B git b \-\-help
+opens this page, because git opens the page for the first word of an
+alias. For a command's own page use
+.B git workflow help branch
+or
+.BR "git workflow branch \-\-help" .
 .SH CONFIGURATION
 All settings live in
 .BR git\-config (1)
@@ -94,7 +156,7 @@ Hotfix branch prefix. Default:
 .TP
 .B workflow.prereleaseLabel
 Default label for
-.BR "git b pre" .
+.BR "git workflow branch pre" .
 Default:
 .BR rc .
 .TP
@@ -120,9 +182,9 @@ instead, for repositories whose dev branch only accepts pull requests.
 .TP
 .B workflow.versionFile
 File that holds the project's version. When it exists,
-.B git b pre
+.B git workflow branch pre
 and
-.B git b finish
+.B git workflow branch finish
 check that it matches the version being tagged ("v1.2.3" or "1.2.3").
 Default:
 .BR VERSION .
@@ -154,24 +216,35 @@ and finishing (or deleting the current branch) with uncommitted changes.
 .TP
 .B NO_COLOR
 When set, messages are not colored.
+.TP
+.B XDG_CONFIG_HOME
+Where your alias sets go: its
+.I git\-workflow/aliases/
+directory. Default:
+.IR ~/.config .
 .SH FILES
 .TP
-.I <prefix>/share/git-workflow/git-workflow-aliases
-A git config file of short aliases
-.RB ( "git s" ,
-.BR "git lg" ,
-\&...). Include it from
-.I ~/.gitconfig
-with
-.BR "git config \-\-global \-\-add include.path" .
+.I ~/.config/git\-workflow/aliases/commands
+.TQ
+.I ~/.config/git\-workflow/aliases/extras
+Your alias sets, once installed:
+.B b = workflow branch
+and the other command aliases, and general-purpose ones
+.RB ( "git lg" ,
+.BR "git s" ,
+\&...).
+.TP
+.I <prefix>/share/git\-workflow/aliases/
+The defaults they are copied from.
 .SH SEE ALSO
-.BR git\-b (1),
-.BR git\-c (1),
-.BR git\-qc (1),
-.BR git\-ps (1),
-.BR git\-sync (1),
-.BR git\-rb\-pull (1),
-.BR git\-sq (1),
+.BR git\-workflow\-branch (1),
+.BR git\-workflow\-commit (1),
+.BR git\-workflow\-quick\-commit (1),
+.BR git\-workflow\-push (1),
+.BR git\-workflow\-sync (1),
+.BR git\-workflow\-pull (1),
+.BR git\-workflow\-squash (1),
+.BR git\-workflow\-aliases (1),
 .BR gitworkflows (7)
 .PP
 https://github.com/joshua-hvmn/git-workflow

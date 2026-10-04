@@ -1,22 +1,27 @@
 # Shared setup: every test gets a bare "remote" with main, next and a v1.0.0
-# tag, plus a fresh clone to work in. Nothing touches your real git config.
+# tag, plus a fresh clone to work in, and the default aliases (git b, git c,
+# ...), so tests run commands the way people type them. Nothing touches your
+# real git config.
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 setup() {
     # GIT_WORKFLOW_BIN runs the suite against an installed copy (make installcheck)
-    export PATH="${GIT_WORKFLOW_BIN:-$REPO_ROOT/scripts}:$PATH"
+    export PATH="${GIT_WORKFLOW_BIN:-$REPO_ROOT/bin}:$PATH"
     export NO_COLOR=1
     # Never open an editor; a test that would is a failing test, not a hang
     export GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true
 
     # Isolate from the developer's ~/.gitconfig (it may set workflow.* keys)
+    # and ~/.config (where the alias sets go)
     export GIT_CONFIG_NOSYSTEM=1
     export GIT_CONFIG_GLOBAL="$BATS_TEST_TMPDIR/gitconfig"
+    export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/config"
     git config --global user.name "Test"
     git config --global user.email "test@example.com"
     git config --global init.defaultBranch main
     git config --global advice.detachedHead false
+    git workflow aliases install >/dev/null 2>&1
 
     REMOTE_DIR="$BATS_TEST_TMPDIR/remote.git"
     SEED="$BATS_TEST_TMPDIR/seed"

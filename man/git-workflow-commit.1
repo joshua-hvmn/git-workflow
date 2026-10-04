@@ -1,14 +1,14 @@
-.TH GIT-C 1 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-COMMIT 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-c \- commit with the message as plain words
+git-workflow-commit \- commit with the message as plain words
 .SH SYNOPSIS
-.B git c
+.B git workflow commit
 .RB [ \-\-amend ]
 .RB [ \-\- ]
 .RI [ message ...]
 .SH DESCRIPTION
 Commit the staged changes. Every word is part of the message, so
-.B git c fix the bug
+.B git workflow commit fix the bug
 commits "fix the bug". With no message, asks for one.
 If nothing is staged, shows the status and offers to stage everything
 .RB ( "git add \-A" ).
@@ -20,7 +20,7 @@ is true.
 Arguments starting with "\-" are refused, because they are almost always
 .BR git\-commit (1)
 flags typed from habit
-.RB ( "git c \-m fix"
+.RB ( "git workflow commit \-m fix"
 would otherwise commit "\-m fix"). Put
 .B \-\-
 before a message that really starts with a dash.
@@ -33,10 +33,20 @@ contains
 .B ?
 or
 .BR ! .
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git c" ;
+the 1.x name
+.B c
+works after
+.B git workflow
+too.
 .SH OPTIONS
 .TP
 .B \-\-amend
 Amend the last commit
 .SH SEE ALSO
-.BR git\-qc (1),
-.BR git\-workflow (7)
+.BR git\-workflow\-quick\-commit (1),
+.BR git\-workflow (1)

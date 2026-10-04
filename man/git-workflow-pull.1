@@ -1,0 +1,34 @@
+.TH GIT-WORKFLOW-PULL 1 2026-10-03 git-workflow "git-workflow manual"
+.SH NAME
+git-rb-pull \- switch to a branch and bring it up to date with the remote
+.SH SYNOPSIS
+.B git workflow pull
+.RI [ branch ]
+.SH DESCRIPTION
+Switch to
+.I branch
+(default: the current branch) and update it from its remote copy.
+.PP
+Protected branches (the main and dev branches) are only fast-forwarded,
+and the command stops if they have diverged, so unpushed merge commits are
+never flattened. Other branches are rebased onto the remote with
+.BR \-\-autostash ,
+unless the remote has nothing new. A branch that was rewritten after it was
+pushed (by
+.BR git\-workflow\-squash (1),
+a rebase or an amend) is not rebased, since that would replay the old
+commits on top: it stops and says to publish with
+.BR "git workflow push force" .
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git rb\-pull" ;
+the 1.x name
+.B rb\-pull
+works after
+.B git workflow
+too.
+.SH SEE ALSO
+.BR git\-workflow\-sync (1),
+.BR git\-workflow (1)

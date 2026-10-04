@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
+# git workflow branch: start, prerelease, finish and delete branches; anything else goes to git branch
+# bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -6,23 +8,17 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
-set -eu
 [ "$#" -eq 0 ] && exec git --no-pager branch
 
-# Where lib/ lives. `make install` fills in this line with the installed path;
-# in a checkout (or a `make link` install) lib/ sits next to the real script.
-GIT_WORKFLOW_LIBDIR=
-if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
-    GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
-fi
-# Source util script
-. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
-. "$GIT_WORKFLOW_LIBDIR/git-release-utils.sh"
-. "$GIT_WORKFLOW_LIBDIR/git-branch-utils.sh"
+. "$GIT_WORKFLOW_DATADIR/core.sh"
+. "$GIT_WORKFLOW_DATADIR/release.sh"
+. "$GIT_WORKFLOW_DATADIR/flow.sh"
 
-b_usage() {
+branch_usage() {
+    local b
+    b=$(wf_cmd branch)
     cat >&2 <<EOF
-usage: git b [<subcommand>] [args]
+usage: $b [<subcommand>] [args]
 
   start <topic|release|hotfix> [name]   start a branch (release/hotfix name = vX.Y.Z)
   prerelease|pre [label|tag] [-n] [-l]  tag the release branch as vX.Y.Z-<label>.N and push
@@ -32,15 +28,15 @@ usage: git b [<subcommand>] [args]
   help                                  this message
   version                               show the git-workflow version
 
-Anything else is passed to 'git branch' (e.g. 'git b -a', 'git b -vv').
-Settings and guardrails: man git-workflow
+Anything else is passed to 'git branch' (e.g. '$b -a', '$b -vv').
+Manual: git workflow help branch
 EOF
 }
 
-B_SUBCMD="${1:-}"
+subcommand="$1"
 shift
 
-case "$B_SUBCMD" in
+case "$subcommand" in
 start)
     start_branch "$@"
     ;;
@@ -60,17 +56,9 @@ help | --help | -h)
     b_usage
     ;;
 version | --version | -V)
-    # Installed: next to the libraries. Checkout: at the repo root.
-    b_version=unknown
-    for f in "$GIT_WORKFLOW_LIBDIR/VERSION" "$GIT_WORKFLOW_LIBDIR/../../VERSION"; do
-        if [ -r "$f" ]; then
-            b_version=$(cat "$f")
-            break
-        fi
-    done
-    printf 'git-workflow %s\n' "$b_version"
+    printf 'git-workflow %s\n' "$(wf_version)"
     ;;
 *)
-    exec git branch "$B_SUBCMD" "$@"
+    exec git branch "$subcommand" "$@"
     ;;
 esac

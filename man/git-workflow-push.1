@@ -1,8 +1,8 @@
-.TH GIT-PS 1 2026-09-24 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-PUSH 1 2026-10-03 git-workflow "git-workflow manual"
 .SH NAME
-git-ps \- sync with the remote branch, then push
+git-workflow-push \- sync with the remote branch, then push
 .SH SYNOPSIS
-.B git ps
+.B git workflow push
 .RB [ force ]
 .SH DESCRIPTION
 Rebase the current branch onto its remote copy (if there is one), then
@@ -12,12 +12,22 @@ Pushing a protected branch warns first, or stops when
 is true.
 .PP
 If the branch was rewritten after it was pushed (by
-.BR git\-sq (1),
+.BR git\-workflow\-squash (1),
 a rebase or an amend),
-.B git ps
+.B git workflow push
 stops and says to use
-.BR "git ps force" ,
+.BR "git workflow push force" ,
 instead of replaying the old commits on top of the rewritten ones.
+.PP
+With the default aliases
+.RB ( "git workflow aliases install" )
+this is also
+.BR "git ps" ;
+the 1.x name
+.B ps
+works after
+.B git workflow
+too.
 .SH OPTIONS
 .TP
 .BR force ", " \-f
@@ -28,5 +38,5 @@ branch has already seen, so commits that only arrived through a
 background fetch are never lost. Protected branches are never
 force-pushed.
 .SH SEE ALSO
-.BR git\-sq (1),
-.BR git\-workflow (7)
+.BR git\-workflow\-squash (1),
+.BR git\-workflow (1)
