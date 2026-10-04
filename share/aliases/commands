@@ -13,3 +13,4 @@
     sq = workflow squash
     sync = workflow sync
     rb-pull = workflow pull
+    wf = workflow

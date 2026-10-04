@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.0.0
+
+### Changed
+
+- **One program, `git workflow`, replaces the seven `git-*` commands.** Each command has a
+  name (`git workflow branch`, `commit`, `quick-commit`, `push`, `sync`, `pull`, `squash`),
+  and the 1.x names work too (`git workflow b`, `c`, `qc`, `ps`, `sq`, `rb-pull`). Installing
+  no longer puts `git-b`, `git-c`, ... on your `PATH`, where git ran them ahead of your own
+  aliases of the same name, and where `git-sync` clashed with git-extras.
+- **`git b`, `git c` and the rest are now aliases you opt into**:
+  `git workflow aliases install` (or `make aliases`) copies the `commands` and `extras` alias
+  sets to `~/.config/git-workflow/aliases/` and includes them from `~/.gitconfig`. The copies
+  are yours to edit; install never overwrites them and leaves out any alias you already have.
+- Messages name commands the way you type them: `git ps force` with the default aliases,
+  your own alias if you renamed it, `git workflow push force` with none.
+- Man pages are `git-workflow(1)` and one `git-workflow-<command>(1)` per command; the 1.x
+  overview in section 7 is now `git-workflow(1)`. `git workflow help <command>` and
+  `git workflow <command> --help` open a command's page.
+- Installed layout: `bin/git-workflow`, and `share/git-workflow/` holding the libraries,
+  `commands/` and the default `aliases/`. `make install` and `make uninstall` remove 1.x files
+  from the same `PREFIX`. `LIBDIR` is gone; the program finds everything through `DATADIR`.
+
+### Added
+
+- `git workflow help` lists the commands with your alias for each.
+- `git workflow aliases [list | install | reset | remove]`.
+
+### Migrating from 1.x
+
+1. Install 2.0 with the same `PREFIX` as before. It removes the 1.x commands, libraries and
+   man pages there. If 1.x lived under another `PREFIX`, run its `make uninstall` too, or
+   `git workflow aliases install` will warn that an old `git-b` (say) still runs instead of
+   the alias.
+2. Run `git workflow aliases install`. It removes the 1.x include of `git-workflow-aliases`
+   and sets up `git b`, `git c`, ... as before, plus `git lg` and the other extras.
+3. Scripts that ran `git-b` directly should run `git workflow branch` (or `git b`).
+
 ## v1.4.2
 
 ### Changed
