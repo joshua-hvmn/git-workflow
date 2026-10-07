@@ -82,5 +82,9 @@ shift
 if [ "${1:-}" = --help ]; then
     exec man "git-workflow-$cmd"
 fi
+# Everything but aliases works on a repository; let git say so if there isn't one
+if [ "$cmd" != aliases ]; then
+    git rev-parse --git-dir >/dev/null || exit 128
+fi
 # shellcheck source=/dev/null # each command file is checked on its own
 . "$GIT_WORKFLOW_DATADIR/commands/$cmd.sh"

@@ -10,9 +10,11 @@
   no longer puts `git-b`, `git-c`, ... on your `PATH`, where git ran them ahead of your own
   aliases of the same name, and where `git-sync` clashed with git-extras.
 - **`git b`, `git c` and the rest are now aliases you opt into**:
-  `git workflow aliases install` (or `make aliases`) copies the `commands` and `extras` alias
-  sets to `~/.config/git-workflow/aliases/` and includes them from `~/.gitconfig`. The copies
-  are yours to edit; install never overwrites them and leaves out any alias you already have.
+  `git workflow aliases install` (or `make aliases`) copies the `commands` alias
+  set to `~/.config/git-workflow/aliases/` and includes it from `~/.gitconfig`. The general
+  purpose `extras` alias set (`git lg`, `git s`, ...) is opt-in: `git workflow aliases install
+extras`. The copies are yours to edit; install never overwrites them and leaves out any alias
+  you already have in `~/.gitconfig` or a file it includes.
 - Messages name commands the way you type them: `git ps force` with the default aliases,
   your own alias if you renamed it, `git workflow push force` with none.
 - Man pages are `git-workflow(1)` and one `git-workflow-<command>(1)` per command; the 1.x
@@ -27,6 +29,13 @@
 - `git workflow help` lists the commands with your alias for each.
 - `git workflow aliases [list | install | reset | remove]`.
 
+### Fixed
+
+- Commands run outside a repository stop with git's own "not a repository" instead of
+  failing partway: `git c` printed the whole `git diff` usage and `git ps` claimed a detached
+  HEAD.
+- `make link` and `make unlink` remove the symlinks 1.x's link commands left in `LINKDIR`.
+
 ### Migrating from 1.x
 
 1. Install 2.0 with the same `PREFIX` as before. It removes the 1.x commands, libraries and
@@ -34,7 +43,7 @@
    `git workflow aliases install` will warn that an old `git-b` (say) still runs instead of
    the alias.
 2. Run `git workflow aliases install`. It removes the 1.x include of `git-workflow-aliases`
-   and sets up `git b`, `git c`, ... as before, plus `git lg` and the other extras.
+   and sets up `git b`, `git c`, ... as before, plus `git lg` and the other extras from 1.x.
 3. Scripts that ran `git-b` directly should run `git workflow branch` (or `git b`).
 
 ## v1.4.2

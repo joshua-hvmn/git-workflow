@@ -48,6 +48,9 @@ DOCDIR  ?= $(PREFIX)/share/doc/$(NAME)
 MANDIR  ?= $(PREFIX)/share/man
 LINKDIR ?= $(HOME)/.local/bin
 
+# Alias sets for `make aliases` / `make unaliases` (empty: install/uninstall defaults)
+SETS ?=
+
 # --- Files --------------------------------------------------------------------
 
 PROGRAM  := bin/$(NAME)
@@ -128,6 +131,15 @@ remove_1x = \
 	$(call remove_files,$(MANDIR)/man7,$(NAME).7); \
 	$(call remove_dir,$(OLD_LIBDIR))
 
+# Remove the symlink 1.x's `make link` left in LINKDIR
+unlink_1x = for s in $(OLD_COMMANDS); do \
+		l="$(LINKDIR)/$$s"; \
+		if [ -L "$$l" ] && [ "$$(readlink "$$l")" = "$(CURDIR)/scripts/$$s" ]; then \
+			$(say) RM "$$l"; \
+			$(RM) "$$l" || exit 1 ; \
+		fi; \
+	done
+
 # $(call path_note,DIR): after a real (unstaged) install into DIR, say when the
 # program can't be found, or when another copy earlier on PATH runs instead
 path_note = [ -n "$(DESTDIR)" ] || { \
@@ -161,7 +173,7 @@ help:
 		PREFIX  '$(PREFIX)'  DESTDIR '$(or $(DESTDIR),(none))' \
 		BINDIR  '$(BINDIR)'  DATADIR '$(DATADIR)' \
 		DOCDIR  '$(DOCDIR)'  MANDIR  '$(MANDIR)' \
-		LINKDIR '$(LINKDIR)'
+		LINKDIR '$(LINKDIR)' SETS    '$(or $(SETS),(defaults))'
 
 ##@ Install
 
@@ -210,16 +222,17 @@ uninstall: ## Remove what install put in PREFIX, and anything 1.x left there
 		! $(GIT) config --global --get-all include.path 2>/dev/null | grep -q '/$(NAME)/aliases/' || \
 		echo "note: ~/.gitconfig still includes your $(NAME) alias sets. make unaliases stops that."
 
-aliases: ## Set up git b, git c, ... and the extras: git workflow aliases install
-	$(Q)$(PROGRAM) aliases install
+aliases: ## Set up git b, git c, ... (SETS=extras for git lg, ...): git workflow aliases install
+	$(Q)$(PROGRAM) aliases install $(SETS)
 
 unaliases: ## Stop including the alias sets (your copies stay): git workflow aliases remove
-	$(Q)$(PROGRAM) aliases remove
+	$(Q)$(PROGRAM) aliases remove $(SETS)
 
 ##@ Development
 
 link: ## Symlink this checkout's program into LINKDIR, so edits take effect at once
 	$(Q)$(MKDIR_P) "$(LINKDIR)"
+	$(Q)$(unlink_1x)
 	@$(say) LINK "$(LINKDIR)/$(NAME)"
 	$(Q)ln -sfn "$(CURDIR)/$(PROGRAM)" "$(LINKDIR)/$(NAME)"
 	$(Q)$(call path_note,$(LINKDIR))
@@ -230,6 +243,7 @@ unlink: ## Remove that symlink (only if it points into this checkout)
 		$(say) RM "$$l"; \
 		$(RM) "$$l"; \
 	fi
+	$(Q)$(unlink_1x)
 
 lint: ## Shellcheck the program, libraries, commands and test helper; lint the man pages
 	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh"

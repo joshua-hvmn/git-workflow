@@ -30,10 +30,10 @@ usage: git workflow aliases [list]
 Sets: commands  b = workflow branch, c = workflow commit, ... (the 1.x names)
       extras    lg, graph, s, st, aa, au, fprune
 
-install  copy each set (default: both) to $USER_DIR/<set>
+install  copy each set (default: commands) to $USER_DIR/<set>
          unless it's already there, and include it from ~/.gitconfig
 reset    replace your copy with the default, keeping yours as <set>.bak
-remove   stop including the set; your copy stays
+remove   stop including each set (default: all); your copy stays
 list     show the aliases that run git-workflow commands, and each set's state
 EOF
 }
@@ -54,16 +54,35 @@ pick_sets() {
     done
 }
 
-included() {
-    git config --global --get-all include.path 2>/dev/null | grep -qxF "$1"
+# include_path <copy>: how ~/.gitconfig names a copy. Under your home directory
+# that's "~/...", which git expands, so a ~/.gitconfig you sync between
+# machines finds the copy on each; anywhere else, the full path.
+include_path() {
+    case "$1" in
+    "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;;
+    *) printf '%s\n' "$1" ;;
+    esac
 }
 
-# Aliases you defined yourself. --global without --includes reads only
-# ~/.gitconfig (and ~/.config/git/config), not the files they include.
+# included <copy>: whether ~/.gitconfig includes it, by either name
+included() {
+    git config --global --get-all include.path 2>/dev/null |
+        grep -qxF -e "$1" -e "$(include_path "$1")"
+}
+
+# Aliases you defined yourself, in ~/.gitconfig or any file it includes, but
+# not the copies of the sets in USER_DIR. With -z, git prints each origin as
+# is (spaces and all) and ends each key at a newline, before its value.
 own_aliases() {
-    local key _
-    git config --global --get-regexp '^alias\.' 2>/dev/null |
-        while read -r key _; do printf '%s\n' "${key#alias.}"; done
+    local origin entry nl=$'\n'
+    git config -z --global --includes --show-origin --get-regexp '^alias\.' 2>/dev/null |
+        while IFS= read -r -d '' origin && IFS= read -r -d '' entry; do
+            case "$origin" in
+            "file:$USER_DIR"/*) continue ;;
+            esac
+            entry="${entry%%"$nl"*}"
+            printf '%s\n' "${entry#alias.}"
+        done
 }
 
 # The alias names an alias file sets (lines that are commented out don't count)
@@ -108,23 +127,35 @@ warn_shadowed() {
     done
 }
 
-# 1.x had you include its alias file straight from the install or a checkout
+# 1.x had you include its alias file straight from the install or a checkout.
+# True if there was such an include to remove.
 drop_1x_includes() {
-    local path
-    git config --global --get-all include.path 2>/dev/null | while IFS= read -r path; do
+    local paths path dropped=1
+    paths=$(git config --global --get-all include.path 2>/dev/null) || return 1
+    while IFS= read -r path; do
         case "$path" in
         */git-workflow/git-workflow-aliases | */alias-core/git-workflow-aliases)
-            git config --global --fixed-value --unset-all include.path "$path" &&
+            if git config --global --fixed-value --unset-all include.path "$path"; then
                 note "Removed the 1.x include of $path"
+                dropped=0
+            fi
             ;;
         esac
-    done
+    done <<<"$paths"
+    return "$dropped"
 }
 
 aliases_install() {
     local sets set dest
-    sets=$(pick_sets "$@") || return 1
-    drop_1x_includes
+    if [ "$#" -gt 0 ]; then
+        sets=$(pick_sets "$@") || return 1
+    else
+        sets=commands
+    fi
+    # The 1.x alias file had the extras too, so an upgrade keeps them
+    if drop_1x_includes && [ "$#" -eq 0 ]; then
+        sets="commands extras"
+    fi
     for set in $sets; do
         dest="$USER_DIR/$set"
         if [ -e "$dest" ]; then
@@ -134,7 +165,7 @@ aliases_install() {
             note "Created $dest"
         fi
         if ! included "$dest"; then
-            git config --global --add include.path "$dest"
+            git config --global --add include.path "$(include_path "$dest")"
             note "~/.gitconfig now includes $dest"
         fi
         warn_shadowed "$dest"
@@ -160,12 +191,15 @@ aliases_reset() {
 }
 
 aliases_remove() {
-    local sets set dest removed=""
+    local sets set dest name removed=""
     sets=$(pick_sets "$@") || return 1
     for set in $sets; do
         dest="$USER_DIR/$set"
         if included "$dest"; then
-            git config --global --fixed-value --unset-all include.path "$dest"
+            # By either name; the one that isn't there fails, which is fine
+            for name in "$dest" "$(include_path "$dest")"; do
+                git config --global --fixed-value --unset-all include.path "$name" || :
+            done
             note "~/.gitconfig no longer includes $dest"
             removed=1
         else

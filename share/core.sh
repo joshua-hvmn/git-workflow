@@ -108,7 +108,7 @@ wf_version() {
 #   git config workflow.remote          origin
 #   git config workflow.releasePrefix   release/
 #   git config workflow.hotfixPrefix    hotfix/
-#   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
+#   git config workflow.prereleaseLabel rc        # default label for `git workflow branch pre`
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
 #   git config workflow.finishTopic     merge     # merge | pr (open a pull request with gh instead)
 #   git config workflow.versionFile     VERSION   # must match the tag in pre/finish; "" disables
@@ -330,7 +330,7 @@ commit_pre_checks() {
 }
 # commit_function [--amend] [--] [message words...]
 # The message is plain words, so anything else starting with "-" is almost
-# certainly a `git commit` flag typed from habit: `git c -m "fix"` would
+# certainly a `git commit` flag typed from habit: `git c -m "fix"` (the alias) would
 # otherwise commit the message "-m fix". Put -- before a message that really
 # starts with a dash.
 commit_function() {
@@ -389,7 +389,7 @@ remote_branch_exists() {
     git show-ref --verify --quiet "refs/remotes/$REMOTE/$1"
 }
 
-# rb-pull: switch to a branch and bring it up to date with the remote
+# git workflow pull: switch to a branch and bring it up to date with the remote
 rb_pull_function() {
     local current="${1:-$working_branch}"
     if [ -z "$current" ]; then
@@ -415,7 +415,7 @@ rb_pull_function() {
         git merge-base --is-ancestor "refs/remotes/$REMOTE/$current" "refs/heads/$current" && return 0
         if history_rewritten "$current"; then
             err "'$current' was rewritten after it was pushed."
-            info "Pulling would replay the old commits on top. Publish the rewrite first: git ps force"
+            info "Pulling would replay the old commits on top. Publish the rewrite first: $(wf_cmd push force)"
             return 1
         fi
         git rebase --autostash "$REMOTE/$current"
@@ -431,7 +431,7 @@ conditional_rb_pull() {
 }
 
 # True when <branch> has diverged from its remote copy only because it was
-# rewritten locally (git sq, rebase, amend) after being pushed: the remote tip
+# rewritten locally (squash, rebase, amend) after being pushed: the remote tip
 # is a commit this branch pointed at before, according to its reflog. Pulling
 # would then replay the old commits on top of the rewritten ones.
 # (This is the same test `git push --force-if-includes` uses.)

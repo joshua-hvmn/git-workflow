@@ -83,16 +83,57 @@ fake_man() {
 
 # --- aliases --------------------------------------------------------------------
 
-@test "aliases install: copies both sets to ~/.config and includes each once" {
+@test "aliases install: copies commands by default, extras on request, each included once" {
     [ -f "$(ALIAS_DIR)/commands" ]
-    [ -f "$(ALIAS_DIR)/extras" ]
+    [ ! -e "$(ALIAS_DIR)/extras" ]
     cmp "$REPO_ROOT/share/aliases/commands" "$(ALIAS_DIR)/commands"
+    [ -z "$(git config alias.lg)" ]
 
-    run git workflow aliases install
+    run git workflow aliases install extras
+    [ "$status" -eq 0 ]
+    run git workflow aliases install commands extras
     [ "$status" -eq 0 ]
     [ "$(include_count "$(ALIAS_DIR)/commands")" -eq 1 ]
     [ "$(include_count "$(ALIAS_DIR)/extras")" -eq 1 ]
     [ "$(git config alias.lg | cut -c1-3)" = "log" ]
+}
+
+@test "aliases install: a copy under your home is included as ~/..." {
+    git workflow aliases remove >/dev/null 2>&1
+    unset XDG_CONFIG_HOME
+    run git workflow aliases install
+    [ "$status" -eq 0 ]
+    [ "$(include_count "~/.config/git-workflow/aliases/commands")" -eq 1 ]
+    run git b
+    [ "$status" -eq 0 ]
+
+    # still found either way, so a second install adds nothing
+    run git workflow aliases install
+    [ "$(include_count "~/.config/git-workflow/aliases/commands")" -eq 1 ]
+    run git workflow aliases
+    [[ "$output" == *"$HOME/.config/git-workflow/aliases/commands (included from ~/.gitconfig)"* ]]
+
+    # the set's own aliases aren't "yours", so reset doesn't comment them out
+    run git workflow aliases reset commands
+    [ "$status" -eq 0 ]
+    cmp "$REPO_ROOT/share/aliases/commands" "$HOME/.config/git-workflow/aliases/commands"
+
+    run git workflow aliases remove
+    [ "$status" -eq 0 ]
+    [ "$(include_count "~/.config/git-workflow/aliases/commands")" -eq 0 ]
+}
+
+@test "aliases remove: also finds an include written with the full path" {
+    git workflow aliases remove >/dev/null 2>&1
+    unset XDG_CONFIG_HOME
+    git workflow aliases install >/dev/null 2>&1
+    git config --global --unset-all include.path
+    git config --global --add include.path "$HOME/.config/git-workflow/aliases/commands"
+
+    run git workflow aliases remove commands
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"no longer includes"* ]]
+    [ -z "$(git config --global --get-all include.path)" ]
 }
 
 @test "aliases install: never overwrites your edited copy" {
@@ -135,6 +176,26 @@ fake_man() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"Removed the 1.x include"* ]]
     [ "$(include_count /usr/local/share/git-workflow/git-workflow-aliases)" -eq 0 ]
+    # the 1.x file had the extras, so the upgrade keeps them
+    [ "$(include_count "$(ALIAS_DIR)/extras")" -eq 1 ]
+    [ "$(git config alias.lg | cut -c1-3)" = "log" ]
+}
+
+@test "aliases install: with sets named, an upgrade installs just those" {
+    git workflow aliases remove >/dev/null 2>&1
+    rm -rf "$(ALIAS_DIR)"
+    git config --global --add include.path /usr/local/share/git-workflow/git-workflow-aliases
+    run git workflow aliases install commands
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Removed the 1.x include"* ]]
+    [ ! -e "$(ALIAS_DIR)/extras" ]
+}
+
+@test "make aliases SETS=extras installs that set" {
+    run make -C "$REPO_ROOT" --no-print-directory aliases SETS=extras
+    [ "$status" -eq 0 ]
+    [ "$(include_count "$(ALIAS_DIR)/extras")" -eq 1 ]
+    [ "$(git config alias.lg | cut -c1-3)" = "log" ]
 }
 
 @test "aliases remove: stops including the sets and keeps your copies" {
@@ -147,6 +208,7 @@ fake_man() {
 }
 
 @test "aliases reset: restores the default and keeps yours as .bak" {
+    git workflow aliases install extras >/dev/null 2>&1
     echo "    mine = status" >>"$(ALIAS_DIR)/extras"
     run git workflow aliases reset extras
     [ "$status" -eq 0 ]
@@ -186,4 +248,97 @@ fake_man() {
     git config --global alias.up "workflow ps"
     run git workflow push
     [[ "$output" == *"Publish the rewrite with: git up force"* ]]
+}
+
+# --- every usage path runs ------------------------------------------------------
+
+@test "branch help and -h print the usage, with or without aliases" {
+    run git workflow branch help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage: git b [<subcommand>]"* ]]
+    run git b -h
+    [ "$status" -eq 0 ]
+
+    git workflow aliases remove >/dev/null 2>&1
+    run git workflow branch help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage: git workflow branch [<subcommand>]"* ]]
+}
+
+@test "branch start with no mode prints its usage" {
+    run git workflow branch start
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"usage: git b start <topic|hotfix|release>"* ]]
+    [[ "$output" != *"command not found"* ]]
+}
+
+@test "without aliases, messages never name a 1.x alias" {
+    git workflow aliases remove >/dev/null 2>&1
+    git switch -qc feat
+    commit_change a c1
+    commit_change a c2
+    git push -qu origin feat
+    git reset -q --soft origin/main
+    git commit -qm squashed
+
+    run git workflow sync
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git workflow push force"* ]]
+
+    local_next
+    git workflow branch start release v1.1.0 >/dev/null 2>&1
+    remote_commit release/v1.1.0 a
+    run git workflow branch pre </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Run 'git workflow sync' first"* ]]
+}
+
+@test "commands outside a repository fail with git's own message" {
+    cd "$BATS_TEST_TMPDIR"
+    export GIT_CEILING_DIRECTORIES="$(dirname "$BATS_TEST_TMPDIR")" # in case TMPDIR is in a repo
+    run git workflow commit hi
+    [ "$status" -eq 128 ]
+    [[ "$output" == *"not a git repository"* ]]
+    [[ "$output" != *"usage: git diff"* ]]
+    run git workflow push
+    [ "$status" -eq 128 ]
+    [[ "$output" == *"not a git repository"* ]]
+    run git workflow version
+    [ "$status" -eq 0 ]
+}
+
+@test "aliases install: an alias in a file you include keeps working" {
+    git workflow aliases remove >/dev/null 2>&1
+    rm -rf "$(ALIAS_DIR)"
+    printf '[alias]\n    c = !echo mine\n' >"$BATS_TEST_TMPDIR/my aliases"
+    git config --global --add include.path "$BATS_TEST_TMPDIR/my aliases"
+
+    run git workflow aliases install
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Left out 'c'"* ]]
+    run git c
+    [ "$output" = "mine" ]
+}
+
+# --- make link ------------------------------------------------------------------
+
+@test "make link and unlink clear away 1.x's links into this checkout, and only those" {
+    local bin="$BATS_TEST_TMPDIR/linkdir" root
+    root=$(cd "$REPO_ROOT" && pwd -P) # make's CURDIR has symlinks resolved
+    mkdir -p "$bin"
+    ln -s "$root/scripts/git-b" "$bin/git-b" # what 1.x make link left
+    ln -s /somewhere/else/git-c "$bin/git-c" # not ours
+
+    run make -C "$REPO_ROOT" --no-print-directory link LINKDIR="$bin"
+    [ "$status" -eq 0 ]
+    [ ! -L "$bin/git-b" ]
+    [ -L "$bin/git-c" ]
+    [ "$(readlink "$bin/git-workflow")" = "$root/bin/git-workflow" ]
+
+    ln -s "$root/scripts/git-sq" "$bin/git-sq"
+    run make -C "$REPO_ROOT" --no-print-directory unlink LINKDIR="$bin"
+    [ "$status" -eq 0 ]
+    [ ! -L "$bin/git-sq" ]
+    [ ! -L "$bin/git-workflow" ]
+    [ -L "$bin/git-c" ]
 }

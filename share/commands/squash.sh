@@ -12,7 +12,7 @@
 
 # Squash the commits this branch adds on top of the dev branch. --keep-base
 # edits those commits in place without moving the branch onto a newer base, so
-# a squash never turns into a surprise conflict; `git sync` is for rebasing.
+# a squash never turns into a surprise conflict; `git workflow sync` is for rebasing.
 detect_protected_branch "rewrite history"
 
 sync_remote

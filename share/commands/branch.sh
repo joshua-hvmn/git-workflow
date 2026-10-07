@@ -53,7 +53,7 @@ config)
     show_config
     ;;
 help | --help | -h)
-    b_usage
+    branch_usage
     ;;
 version | --version | -V)
     printf 'git-workflow %s\n' "$(wf_version)"

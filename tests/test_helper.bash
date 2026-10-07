@@ -13,10 +13,13 @@ setup() {
     export GIT_EDITOR=true GIT_SEQUENCE_EDITOR=true
 
     # Isolate from the developer's ~/.gitconfig (it may set workflow.* keys)
-    # and ~/.config (where the alias sets go)
+    # and ~/.config (where the alias sets go). HOME is a sibling of
+    # XDG_CONFIG_HOME, so includes are written with their full path
     export GIT_CONFIG_NOSYSTEM=1
     export GIT_CONFIG_GLOBAL="$BATS_TEST_TMPDIR/gitconfig"
     export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/config"
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME"
     git config --global user.name "Test"
     git config --global user.email "test@example.com"
     git config --global init.defaultBranch main

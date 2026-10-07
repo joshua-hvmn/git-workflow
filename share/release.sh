@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced by the git-* commands; not executable on its own.
+# Sourced by the git-workflow commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -7,7 +7,7 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 #
-# Version / tag helpers and the `git b prerelease` command.
+# Version / tag helpers and the `git workflow branch prerelease` command.
 
 # Include guard to prevent redundant parsing
 if [ -n "${__RELEASE_UTILS_LOADED:-}" ]; then
@@ -149,7 +149,7 @@ ensure_branch_pushed() {
     behind="${counts##*[[:space:]]}"
 
     if [ "$behind" -gt 0 ]; then
-        err "'$branch' is $behind commit(s) behind '$REMOTE/$branch'. Run 'git sync' first."
+        err "'$branch' is $behind commit(s) behind '$REMOTE/$branch'. Run '$(wf_cmd sync)' first."
         return 1
     fi
     if [ "$ahead" -gt 0 ]; then
@@ -256,7 +256,7 @@ prerelease_branch() {
             return 1
         fi
         if [ -z "$base" ]; then
-            err "no version in branch name; pass a full tag instead, e.g.'$(wf_cmd branch pre v1.2.3-rc.1)'."
+            err "no version in branch name; pass a full tag instead, e.g. '$(wf_cmd branch pre v1.2.3-rc.1)'."
             return 1
         fi
         tag=$(next_prerelease_tag "$base" "$label")

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced by the git-* commands; not executable on its own.
+# Sourced by the git-workflow commands; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -67,7 +67,7 @@ start_branch() {
     local start_message="Enter new topic branch name:"
 
     if [ -z "$start_mode" ]; then
-        err "usage: $(wg_cmd branch start "<topic|hotfix|release> [branch-name]")"
+        err "usage: $(wf_cmd branch start "<topic|hotfix|release> [branch-name]")"
         return 1
     fi
 
@@ -364,7 +364,7 @@ delete_branch() {
                 case "$1" in
                 y | yes | d) no_prompt=1 ;;
                 *)
-                    err "too many arguments. usage:$(wf_cmd branch delete "[branch] [-y] [-f]")"
+                    err "too many arguments. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
                     return 1
                     ;;
                 esac

@@ -106,7 +106,7 @@ Or, locally: `make install PREFIX="$HOME/.local"`
 
 ```sh
 git clone https://github.com/joshua-hvmn/git-workflow.git && cd git-workflow
-make link                 # symlinks the commands into ~/.local/bin; edits take effect immediately
+make link                 # symlinks the program into ~/.local/bin; edits take effect immediately
 make unlink               # undo
 ```
 
@@ -115,14 +115,17 @@ make unlink               # undo
 **Aliases** are opt-in, because they edit your `~/.gitconfig`:
 
 ```sh
-git workflow aliases install  # or, from the source directory: make aliases
+git workflow aliases install         # or, from the source directory: make aliases
+git workflow aliases install extras  # optional: git lg, git s, ... (make aliases SETS=extras)
 ```
 
-That copies two alias sets into `~/.config/git-workflow/aliases/` and includes them from
-`~/.gitconfig`: `commands` (`git b`, `git c`, `git qc`, `git ps`, `git sq`, `git sync`,
-`git rb-pull`) and `extras` (`git lg`, `git s`, ...). The copies are yours: rename or delete
-aliases, and messages and `git workflow help` use your names. An alias you already have keeps
-working (it's left out of your copy). The rest of this README uses the default names.
+That copies the `commands` alias set (`git b`, `git c`, `git qc`, `git ps`, `git sq`, `git sync`,
+`git rb-pull`, `git wf`) into `~/.config/git-workflow/aliases/` and includes it from
+`~/.gitconfig` as `~/.config/...`, so a synced `~/.gitconfig` works on every machine. The
+`extras` set, general-purpose aliases unrelated to the flow, is opt-in. The copies are yours:
+rename or delete aliases, and messages and `git workflow help` use your names. An alias you
+already have, in `~/.gitconfig` or a file it includes, keeps working (it's left out of your
+copy). The rest of this README uses the default names.
 
 Then `git workflow version` shows what's installed, `git workflow help` lists the commands with
 your alias for each, and `man git-workflow` is the manual.
@@ -132,7 +135,7 @@ your alias for each, and `man git-workflow` is the manual.
 
 **Upgrading from v1.x**: `make install` removes the 1.x `git-*` commands from the same `PREFIX`
 (git would run them instead of the new aliases), and `git workflow aliases install` replaces the
-1.x alias include. See the [CHANGELOG](CHANGELOG.md).
+1.x alias include, keeping the extras (`git lg`, ...) it had. See the [CHANGELOG](CHANGELOG.md).
 
 ## Configuration
 
@@ -192,7 +195,7 @@ what would happen.
 | `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |
 | `git b delete [branch] [-y] [-f]`             | delete locally and on the remote                                      |
 | `git b config` / `git b help`                 | settings / usage                                                      |
-| `git wf version`                              | installed version (from `VERSION`)                                    |
+| `git workflow version`                        | installed version (from `VERSION`)                                    |
 
 ### start
 
@@ -300,12 +303,12 @@ overwrite someone else's commits. Protected branches are never force-pushed.
 
 ## Aliases
 
-| Command                            | Does                                                                |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `git workflow aliases [list]`      | the aliases that run git-workflow commands, and where each set is   |
-| `git workflow aliases install`     | copy the sets to `~/.config/git-workflow/aliases/` and include them |
-| `git workflow aliases reset <set>` | restore a set's default (yours is kept as `<set>.bak`)              |
-| `git workflow aliases remove`      | stop including the sets (your copies stay)                          |
+| Command                                | Does                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `git workflow aliases [list]`          | the aliases that run git-workflow commands, and where each set is          |
+| `git workflow aliases install [<set>]` | copy `commands` (or the sets you name) to `~/.config/...` and include them |
+| `git workflow aliases reset <set>`     | restore a set's default (yours is kept as `<set>.bak`)                     |
+| `git workflow aliases remove [<set>]`  | stop including the sets, all of them by default (your copies stay)         |
 
 The sets are git config files, `commands` and `extras`:
 
@@ -318,6 +321,7 @@ The sets are git config files, `commands` and `extras`:
     sq = workflow squash
     sync = workflow sync
     rb-pull = workflow pull
+    wf = workflow                # anything else: git wf help, git wf version
 ```
 
 `extras` has `git lg`, `git graph`, `git s`, `git st`, `git aa`, `git au` and `git fprune`.
@@ -375,7 +379,7 @@ signature, and warns 60 days before the key expires.
 ## Development
 
 ```sh
-make link           # run your checkout as the installed commands
+make link           # run your checkout as the installed program
 make lint           # shellcheck (+ mandoc for the man pages, if installed)
 make test           # bats suite (needs bats-core: pacman -S bash-bats / apt install bats / brew install bats-core)
 make installcheck   # install into a temp dir and run the suite against that copy
