@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
+# git workflow squash: interactively squash the current branch's own commits
+# bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -6,20 +8,11 @@
 # This software is released under the MIT License, and is provided as is, without warranty.
 # Modify & distribute freely.
 
-set -eu
+. "$GIT_WORKFLOW_DATADIR/core.sh"
 
-# Where lib/ lives. `make install` fills in this line with the installed path;
-# in a checkout (or a `make link` install) lib/ sits next to the real script.
-GIT_WORKFLOW_LIBDIR=
-if [ -z "$GIT_WORKFLOW_LIBDIR" ]; then
-    GIT_WORKFLOW_LIBDIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/lib
-fi
-. "$GIT_WORKFLOW_LIBDIR/git-core-utils.sh"
-
-# MAIN
 # Squash the commits this branch adds on top of the dev branch. --keep-base
 # edits those commits in place without moving the branch onto a newer base, so
-# a squash never turns into a surprise conflict; `git sync` is for rebasing.
+# a squash never turns into a surprise conflict; `git workflow sync` is for rebasing.
 detect_protected_branch "rewrite history"
 
 sync_remote
@@ -43,5 +36,5 @@ fi
 git rebase -i --keep-base "$squash_against"
 
 if [ -n "$working_branch" ] && history_rewritten "$working_branch"; then
-    note "'$working_branch' was already pushed. Publish the squash with: git ps force"
+    note "'$working_branch' was already pushed. Publish the squash with: $(wf_cmd push force)"
 fi

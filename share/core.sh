@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced by the git-* commands; not executable on its own.
+# Sourced by every git-workflow command; not executable on its own.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -29,6 +29,75 @@ warn() { printf '%sWarning:%s %s\n' "$__C_YEL" "$__C_RST" "$*" >&2; }
 err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 
 # ---------------------------------------------------------------------------
+# Commands and the aliases that run them
+# ---------------------------------------------------------------------------
+
+# wf_resolve <name>: the command a name runs, short (1.x) names included.
+# Prints nothing and fails for anything else.
+wf_resolve() {
+    case "$1" in
+    branch | b) echo branch ;;
+    commit | c) echo commit ;;
+    quick-commit | qc) echo quick-commit ;;
+    push | ps) echo push ;;
+    squash | sq) echo squash ;;
+    sync) echo sync ;;
+    pull | rb-pull) echo pull ;;
+    aliases) echo aliases ;;
+    *) return 1 ;;
+    esac
+}
+
+# Record an alias whose whole value is "workflow <command>"
+__wf_note_alias() {
+    local name="$1" w1 w2 rest cmd
+    read -r w1 w2 rest <<<"$2"
+    [ "$w1" = workflow ] && [ -n "$w2" ] && [ -z "$rest" ] || return 0
+    cmd=$(wf_resolve "$w2") || return 0
+    WF_ALIASES="$WF_ALIASES$cmd $name
+"
+}
+
+# wf_alias_for <command>: the first alias that runs it, if any
+wf_alias_for() {
+    local cmd name
+    while read -r cmd name; do
+        if [ "$cmd" = "$1" ]; then
+            printf '%s' "$name"
+            return 0
+        fi
+    done <<<"$WF_ALIASES"
+    return 1
+}
+
+# wf_cmd <command> [args...]: how to type a command, for messages. Uses your
+# alias when you have one ("git ps force"), the full form otherwise
+# ("git workflow push force").
+wf_cmd() {
+    local cmd="$1" name
+    shift
+    if name=$(wf_alias_for "$cmd"); then
+        set -- "git $name" "$@"
+    else
+        set -- "git workflow $cmd" "$@"
+    fi
+    printf '%s' "$*"
+}
+
+# The installed version: next to the libraries when installed, at the root of
+# a checkout otherwise
+wf_version() {
+    local f
+    for f in "$GIT_WORKFLOW_DATADIR/VERSION" "$GIT_WORKFLOW_DATADIR/../VERSION"; do
+        if [ -r "$f" ]; then
+            cat "$f"
+            return 0
+        fi
+    done
+    echo unknown
+}
+
+# ---------------------------------------------------------------------------
 # Configuration
 #
 # Everything is read from `git config`, so it can be set globally
@@ -39,7 +108,7 @@ err() { printf '%sError:%s %s\n' "$__C_RED" "$__C_RST" "$*" >&2; }
 #   git config workflow.remote          origin
 #   git config workflow.releasePrefix   release/
 #   git config workflow.hotfixPrefix    hotfix/
-#   git config workflow.prereleaseLabel rc        # default label for `git b prerelease`
+#   git config workflow.prereleaseLabel rc        # default label for `git workflow branch pre`
 #   git config workflow.strict          false     # true = flow violations abort instead of asking
 #   git config workflow.finishTopic     merge     # merge | pr (open a pull request with gh instead)
 #   git config workflow.versionFile     VERSION   # must match the tag in pre/finish; "" disables
@@ -59,9 +128,13 @@ STRICT=false
 FINISH_TOPIC=merge
 VERSION_FILE=VERSION
 EXTRA_PROTECTED=''
+# "<command> <alias>" lines, one per alias that runs a git-workflow command
+# ("b = workflow branch"), so messages can name commands the way you type them
+WF_ALIASES=''
 
 while read -r __key __value; do
     case "$__key" in
+    alias.*) __wf_note_alias "${__key#alias.}" "$__value" ;;
     workflow.mainbranch) MAIN_BRANCH="$__value" ;;
     workflow.devbranch) DEV_BRANCH="$__value" ;;
     workflow.remote) REMOTE="$__value" ;;
@@ -79,7 +152,7 @@ while read -r __key __value; do
         esac
         ;;
     esac
-done < <(git config --get-regexp '^workflow\.' 2>/dev/null || true)
+done < <(git config --get-regexp '^(workflow|alias)\.' 2>/dev/null || true)
 unset __key __value
 
 case "$FINISH_TOPIC" in
@@ -257,7 +330,7 @@ commit_pre_checks() {
 }
 # commit_function [--amend] [--] [message words...]
 # The message is plain words, so anything else starting with "-" is almost
-# certainly a `git commit` flag typed from habit: `git c -m "fix"` would
+# certainly a `git commit` flag typed from habit: `git c -m "fix"` (the alias) would
 # otherwise commit the message "-m fix". Put -- before a message that really
 # starts with a dash.
 commit_function() {
@@ -272,8 +345,8 @@ commit_function() {
     else
         case "${1:-}" in
         -*)
-            err "unknown option '$1'. The message is plain words: git c fix the bug, or git qc 'fix the bug'"
-            info "(use --): git c [--amend] -- $1"
+            err "unknown option '$1'. The message is plain words: $(wf_cmd commit fix the bug), or $(wf_cmd quick-commit "'fix the bug'")"
+            info "(use --): $(wf_cmd commit "[--amend] -- $1")"
             return 1
             ;;
         esac
@@ -316,7 +389,7 @@ remote_branch_exists() {
     git show-ref --verify --quiet "refs/remotes/$REMOTE/$1"
 }
 
-# rb-pull: switch to a branch and bring it up to date with the remote
+# git workflow pull: switch to a branch and bring it up to date with the remote
 rb_pull_function() {
     local current="${1:-$working_branch}"
     if [ -z "$current" ]; then
@@ -342,7 +415,7 @@ rb_pull_function() {
         git merge-base --is-ancestor "refs/remotes/$REMOTE/$current" "refs/heads/$current" && return 0
         if history_rewritten "$current"; then
             err "'$current' was rewritten after it was pushed."
-            info "Pulling would replay the old commits on top. Publish the rewrite first: git ps force"
+            info "Pulling would replay the old commits on top. Publish the rewrite first: $(wf_cmd push force)"
             return 1
         fi
         git rebase --autostash "$REMOTE/$current"
@@ -358,7 +431,7 @@ conditional_rb_pull() {
 }
 
 # True when <branch> has diverged from its remote copy only because it was
-# rewritten locally (git sq, rebase, amend) after being pushed: the remote tip
+# rewritten locally (squash, rebase, amend) after being pushed: the remote tip
 # is a commit this branch pointed at before, according to its reflog. Pulling
 # would then replay the old commits on top of the rewritten ones.
 # (This is the same test `git push --force-if-includes` uses.)

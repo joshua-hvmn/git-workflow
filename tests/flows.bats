@@ -230,4 +230,5 @@ load test_helper
     [ "$status" -eq 0 ]
     run git b start release v1.8.0
     [ "$status" -ne 0 ]
+    [[ "$output" == *"not newer"* ]]
 }

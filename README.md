@@ -29,26 +29,47 @@ main ──────────────────────●──
 
 ## Install
 
-Git runs any `git-<name>` executable on your `PATH` as `git <name>`. That's how tools like
-`git-lfs` plug in, and it's why these are separate commands instead of one entrypoint.
+git-workflow installs one program, `git-workflow`, which git runs as `git workflow` (git runs
+any `git-<name>` on your `PATH` as `git <name>`; that's how `git lfs` plugs in too). The short
+names, `git b`, `git c` and so on, are aliases you opt into, so git-workflow never takes a name
+you already use.
 
-**From a release** (what a distro package does):
+### **From a release** (manual install):
+
+#### Step 1: Download files
 
 ```sh
+# Set the version variable, you must change this variable. Set it to the version
+# you want to download. Change nothing else in this block to install git-workflow.
 version=vX.Y.Z
+
+# Set constants for download (don't change these).
+fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD   # Master fingerprint, see below
 project=git-workflow
 username=joshua-hvmn
 repo=$username/$project
-fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD
-base=https://github.com/$repo/releases/download/$version
 package=$project-$version
 tarball=$package.tar.gz
 signature=$tarball.sig
-curl -LO "$base/$tarball" -LO "$base/$signature"
+base=https://github.com/$repo/releases/download/$version
 
-# GPG: Fetch the key and verify, you can skip this if you have gh, use the command below this block.
+# Download the source code and the signature file.
+curl -LO "$base/$tarball" -LO "$base/$signature"
+```
+
+#### Step 2: Verify the tarball was signed by me.
+
+_Note: validate my master identity outside of this repository if you are paranoid._
+
+```
+# GPG: Fetch the key and verify the signature, you can skip this if you have gh,
+# use the command below this block.
 gpg --keyserver keyserver.ubuntu.com --recv-keys "$fingerprint"
-gpg --verify "$signature" "$tarball"
+if gpg --verify "$signature" "$tarball"; then
+    package_validated=true
+else
+    echo "FATAL ERROR: packaged signature failure. Do not extract this package."
+fi
 ```
 
 _Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
@@ -69,32 +90,52 @@ The tarball signing key for this repository is a subkey of my master key, so gpg
 shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
 this architecture exists is so I can revoke the signing key for this repository (only) if it is compromised.
 
+#### Step 3: Unpack and install git-workflow
+
 ```sh
-tar xzf "$tarball" && cd "$package" # extract
-make check                          # optional: run the test suite (needs bats-core)
+[[ "$package_validated" == "true" ]] && tar xzf "$tarball" && cd "$package"
+```
+
+```
 sudo make install                   # into /usr/local
 ```
 
 Or, locally: `make install PREFIX="$HOME/.local"`
 
-**From a clone, for hacking on it:**
+### **From a clone, for hacking on it:**
 
 ```sh
 git clone https://github.com/joshua-hvmn/git-workflow.git && cd git-workflow
-make link                 # symlinks the commands into ~/.local/bin; edits take effect immediately
+make link                 # symlinks the program into ~/.local/bin; edits take effect immediately
 make unlink               # undo
 ```
 
-**Aliases** (`git s`, `git lg`, ...) are opt-in, because they edit your `~/.gitconfig`:
+### Extra Installation steps:
+
+**Aliases** are opt-in, because they edit your `~/.gitconfig`:
 
 ```sh
-make aliases              # include alias-core/git-workflow-aliases from this checkout
-git config --global --add include.path /usr/local/share/git-workflow/git-workflow-aliases   # after make install
+git workflow aliases install         # or, from the source directory: make aliases
+git workflow aliases install extras  # optional: git lg, git s, ... (make aliases SETS=extras)
 ```
 
-Then `git b version` shows what's installed, and `git b --help` (or `man git-workflow`) the manual.
+That copies the `commands` alias set (`git b`, `git c`, `git qc`, `git ps`, `git sq`, `git sync`,
+`git rb-pull`, `git wf`) into `~/.config/git-workflow/aliases/` and includes it from
+`~/.gitconfig` as `~/.config/...`, so a synced `~/.gitconfig` works on every machine. The
+`extras` set, general-purpose aliases unrelated to the flow, is opt-in. The copies are yours:
+rename or delete aliases, and messages and `git workflow help` use your names. An alias you
+already have, in `~/.gitconfig` or a file it includes, keeps working (it's left out of your
+copy). The rest of this README uses the default names.
 
-`make uninstall` (with the same `PREFIX`) removes an install. `make help` lists every target.
+Then `git workflow version` shows what's installed, `git workflow help` lists the commands with
+your alias for each, and `man git-workflow` is the manual.
+
+`make uninstall` (with the same `PREFIX`) removes an install; your alias copies stay, and
+`make unaliases` stops including them. `make help` lists every target.
+
+**Upgrading from v1.x**: `make install` removes the 1.x `git-*` commands from the same `PREFIX`
+(git would run them instead of the new aliases), and `git workflow aliases install` replaces the
+1.x alias include, keeping the extras (`git lg`, ...) it had. See the [CHANGELOG](CHANGELOG.md).
 
 ## Configuration
 
@@ -144,15 +185,17 @@ what would happen.
 
 ## `git b`: branches and releases
 
+`git b` is `git workflow branch`
+
 | Command                                       | Description                                                           |
 | --------------------------------------------- | --------------------------------------------------------------------- |
-| `git b`                                       | `git branch` (anything unrecognised passes through, e.g. `git b -vv`) |
+| `git b`                                       | `git branch` (anything unrecognized passes through, e.g. `git b -vv`) |
 | `git b start <topic\|release\|hotfix> [name]` | start a branch from the right base and push it                        |
 | `git b pre [label\|tag] [-n] [-l]`            | tag the release branch as a prerelease and push the tag               |
 | `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |
 | `git b delete [branch] [-y] [-f]`             | delete locally and on the remote                                      |
 | `git b config` / `git b help`                 | settings / usage                                                      |
-| `git b version`                               | installed version (from `VERSION`)                                    |
+| `git workflow version`                        | installed version (from `VERSION`)                                    |
 
 ### start
 
@@ -218,6 +261,9 @@ aren't merged into main or dev needs `-f`. Protected branches are never deleted.
 
 ## Other commands
 
+Each is short for a `git workflow` command: `c` for `commit`, `qc` for `quick-commit`, `ps` for
+`push`, `sync`, `rb-pull` for `pull`, and `sq` for `squash`.
+
 | Command                     | Description                                                                              |
 | --------------------------- | ---------------------------------------------------------------------------------------- |
 | `git c [--amend] [message]` | commit; offers `git add -A` if nothing is staged. `--amend` alone keeps the message      |
@@ -257,8 +303,33 @@ overwrite someone else's commits. Protected branches are never force-pushed.
 
 ## Aliases
 
-`alias-core/git-workflow-aliases` is a git config file (`make aliases` includes it):
-`git s`, `git st`, `git lg`, `git graph`, `git aa`, `git au`, `git fprune`.
+| Command                                | Does                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `git workflow aliases [list]`          | the aliases that run git-workflow commands, and where each set is          |
+| `git workflow aliases install [<set>]` | copy `commands` (or the sets you name) to `~/.config/...` and include them |
+| `git workflow aliases reset <set>`     | restore a set's default (yours is kept as `<set>.bak`)                     |
+| `git workflow aliases remove [<set>]`  | stop including the sets, all of them by default (your copies stay)         |
+
+The sets are git config files, `commands` and `extras`:
+
+```ini
+[alias]
+    b = workflow branch          # commands
+    c = workflow commit
+    qc = workflow quick-commit
+    ps = workflow push
+    sq = workflow squash
+    sync = workflow sync
+    rb-pull = workflow pull
+    wf = workflow                # anything else: git wf help, git wf version
+```
+
+`extras` has `git lg`, `git graph`, `git s`, `git st`, `git aa`, `git au` and `git fprune`.
+
+`install` never overwrites your copy, and it warns when a `git-<name>` program on your `PATH`
+would run instead of an alias (git prefers programs to aliases). `git b --help` opens
+`git-workflow(1)`, because git opens the page for an alias's first word; `git workflow help
+branch` opens the command's own page.
 
 ## CI pairing
 
@@ -280,15 +351,18 @@ make check                                  # test suite (bats-core)
 make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
 ```
 
-| Path (`PREFIX=/usr`)                   | Contents                                      |
-| -------------------------------------- | --------------------------------------------- |
-| `/usr/bin/git-*`                       | the commands                                  |
-| `/usr/share/git-workflow/`             | sourced libraries, VERSION and the alias file |
-| `/usr/share/man/man1/git-*.1`, `man7/` | man pages (`git b --help` opens `git-b(1)`)   |
-| `/usr/share/doc/git-workflow/`         | README, CHANGELOG, LICENSE                    |
+| Path (`PREFIX=/usr`)                  | Contents                                                    |
+| ------------------------------------- | ----------------------------------------------------------- |
+| `/usr/bin/git-workflow`               | the program                                                 |
+| `/usr/share/git-workflow/`            | sourced libraries and `VERSION`                             |
+| `/usr/share/git-workflow/commands/`   | one file per command, sourced by the program                |
+| `/usr/share/git-workflow/aliases/`    | the default alias sets                                      |
+| `/usr/share/man/man1/git-workflow*.1` | man pages (`git workflow help <command>` opens a command's) |
+| `/usr/share/doc/git-workflow/`        | README, CHANGELOG, LICENSE                                  |
 
-`BINDIR`, `LIBDIR`, `DATADIR`, `DOCDIR` and `MANDIR` can be overridden individually.
-`make install` never touches `$HOME` or `~/.gitconfig`. Release tarballs include the tests.
+`BINDIR`, `DATADIR`, `DOCDIR` and `MANDIR` can be overridden individually. `make install`
+never touches `$HOME` or `~/.gitconfig`, and removes 1.x files from the same `PREFIX`. Release
+tarballs include the tests.
 
 The publish job runs in a `release` environment, so a copy of the workflow needs one
 (Settings → Environments), with:
@@ -305,14 +379,15 @@ signature, and warns 60 days before the key expires.
 ## Development
 
 ```sh
-make link           # run your checkout as the installed commands
+make link           # run your checkout as the installed program
 make lint           # shellcheck (+ mandoc for the man pages, if installed)
 make test           # bats suite (needs bats-core: pacman -S bash-bats / apt install bats / brew install bats-core)
 make installcheck   # install into a temp dir and run the suite against that copy
 ```
 
 Tests run each command against a throwaway bare remote and clone, with your global git config
-isolated. `tests/regressions.bats` has one test per fixed bug, grouped by release;
-`tests/flows.bats` covers the full flows and guardrails. CI runs lint, the suite, and
+and `~/.config` isolated and the default aliases installed. `tests/regressions.bats` has one test
+per fixed bug, grouped by release; `tests/flows.bats` covers the full flows and guardrails;
+`tests/cli.bats` covers the program itself, its help and the alias sets. CI runs lint, the suite, and
 `installcheck` on Linux and macOS with its stock Bash 3.2, on every push to a flow branch
 and on pull requests.

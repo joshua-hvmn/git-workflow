@@ -1,0 +1,97 @@
+.TH GIT-WORKFLOW-ALIASES 1 2026-10-03 git-workflow "git-workflow manual"
+.SH NAME
+git-workflow-aliases \- set up, list, reset or remove the git-workflow aliases
+.SH SYNOPSIS
+.B git workflow aliases
+.RB [ list ]
+.br
+.B git workflow aliases install
+.RI [ set ...]
+.br
+.B git workflow aliases reset
+.IR set ...
+.br
+.B git workflow aliases remove
+.RI [ set ...]
+.SH DESCRIPTION
+An alias set is a git config file of aliases. There are two:
+.TP
+.B commands
+Short names for the commands, the names they had in 1.x:
+.BR "b = workflow branch" ,
+.BR "c = workflow commit" ,
+.BR qc ,
+.BR ps ,
+.BR sq ,
+.B sync
+and
+.BR rb\-pull ,
+plus
+.B wf = workflow
+for everything else.
+.TP
+.B extras
+General-purpose aliases:
+.BR lg ,
+.BR graph ,
+.BR s ,
+.BR st ,
+.BR aa ,
+.B au
+and
+.BR fprune .
+.PP
+The defaults ship with git-workflow. Your copies live in
+.I ~/.config/git\-workflow/aliases/
+and are included from
+.IR ~/.gitconfig ,
+so you can edit them like any other git config file. A copy under your home
+directory is included as
+.IR ~/.config/... ,
+not by its full path, so a
+.I ~/.gitconfig
+you sync between machines works on each.
+.SH COMMANDS
+.TP
+.B install \fR[\fIset\fR...]
+Copy each set (default:
+.BR commands )
+to your config directory, unless a copy is already there, and include it from
+.IR ~/.gitconfig .
+An existing copy is never overwritten. An alias you already define, in
+.I ~/.gitconfig
+or a file it includes, is left out of the new copy (commented out, with a
+note), so yours keeps working. It warns when a
+.BI git\- name
+program on
+.B PATH
+would run instead of an alias, as git prefers programs to aliases. It
+removes a 1.x include of the old alias file; when there was one and no
+.I set
+is named, it installs
+.B extras
+as well, since the 1.x file had them.
+.TP
+.B reset \fIset\fR...
+Replace your copy with the default, keeping yours as
+.IR set .bak.
+.TP
+.B remove \fR[\fIset\fR...]
+Stop including each set (default: all of them). Your copies stay.
+.TP
+.B list
+The default. Show each alias that runs a git-workflow command, and where each
+set is and whether it is included.
+.SH FILES
+.TP
+.I ~/.config/git\-workflow/aliases/
+Your copies;
+.B XDG_CONFIG_HOME
+replaces
+.IR ~/.config .
+.TP
+.I <prefix>/share/git\-workflow/aliases/
+The defaults.
+.SH SEE ALSO
+.BR git\-workflow (1),
+.BR git\-config (1)

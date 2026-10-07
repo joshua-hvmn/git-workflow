@@ -1,4 +1,5 @@
-# Tag-triggered release, paired with `git b pre` and `git b finish`.
+# Tag-triggered release, paired with `git workflow branch pre` and `git workflow branch finish`
+# (`git b pre` and `git b finish` with the default aliases).
 #
 #   v1.3.0-rc.1  (any tag containing "-")  -> GitHub *prerelease*, from any branch
 #   v1.3.0       (plain vX.Y.Z)            -> full release, only if the commit is on main
@@ -55,7 +56,7 @@ jobs:
         run: |
           commit=$(git rev-parse "$GITHUB_REF_NAME^{commit}")
           git merge-base --is-ancestor "$commit" origin/main || {
-            echo "::error::$GITHUB_REF_NAME is not on main; stable releases come from 'git b finish'."
+            echo "::error::$GITHUB_REF_NAME is not on main; stable releases come from 'git workflow branch finish'."
             exit 1
           }
 
