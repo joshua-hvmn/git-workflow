@@ -256,7 +256,7 @@ remove)
 help | -h) aliases_usage ;;
 *)
     err "unknown subcommand '$1'"
-    aliases_usage
+    aliases_usage >&2
     exit 1
     ;;
 esac
