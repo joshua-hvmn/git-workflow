@@ -11,6 +11,33 @@ strict mode) when you step outside the flow.
 
 Plain Bash plus `git`. No config file to parse: settings live in `git config`.
 
+```console
+$ git b start release v1.3.0
+Starting release branch 'release/v1.3.0' from 'next'...
+Switched to a new branch 'release/v1.3.0'
+$ echo v1.3.0 >VERSION && git c bump version to v1.3.0
+[release/v1.3.0 de4936e] bump version to v1.3.0
+$ git b pre
+Push 1 local commit(s) to 'origin/release/v1.3.0' first? [Y/n]: y
+Create prerelease tag 'v1.3.0-rc.1' at de4936e and push it (triggers the release workflow)? [y/N]: y
+Pushed prerelease 'v1.3.0-rc.1'.
+Watch the release run: https://github.com/you/app/actions  (or: gh run watch)
+$ git b finish
+Prereleases for v1.3.0: v1.3.0-rc.1
+Merge 'release/v1.3.0' into main and next, tag v1.3.0, and push? [y/N]: y
+   920eaa0..ec7014e  main -> main
+   920eaa0..ec7014e  next -> next
+ * [new tag]         v1.3.0 -> v1.3.0
+Delete 'release/v1.3.0' locally and on 'origin'? [y/N]: y
+Branch release/v1.3.0 deleted.
+$ git c quick fix
+Warning: 'main' is a protected branch; you are about to commit directly on it.
+Continue anyway? [y/N]: n
+Aborted.
+```
+
+_A real session, with most of git's own output left out._
+
 ```
 next ──●────●──────────────────●───────  ← topic branches merge here
         \                     / (back-merge)
@@ -21,12 +48,6 @@ release/v1.2.0 ──●──●────●───┘
 main ──────────────────────●── v1.2.0   ← git b finish: merge, tag, push atomically
 ```
 
-## Requirements
-
-- Bash 3.2 or newer (macOS's `/bin/bash` works)
-- Git 2.30 or newer (`--force-if-includes`)
-- Optional: [GitHub CLI](https://cli.github.com) (`gh`), for `workflow.finishTopic=pr`
-
 ## Install
 
 git-workflow installs one program, `git-workflow`, which git runs as `git workflow` (git runs
@@ -34,75 +55,25 @@ any `git-<name>` on your `PATH` as `git <name>`; that's how `git lfs` plugs in t
 names, `git b`, `git c` and so on, are aliases you opt into, so git-workflow never takes a name
 you already use.
 
-### **From a release** (manual install):
+It needs Bash 3.2 or newer (macOS's `/bin/bash` works) and Git 2.30 or newer. The
+[GitHub CLI](https://cli.github.com) (`gh`) is optional, for `workflow.finishTopic=pr`.
 
-#### Step 1: Download files
-
-```sh
-# Set the version variable, you must change this variable. Set it to the version
-# you want to download. Change nothing else in this block to install git-workflow.
-version=vX.Y.Z
-
-# Set constants for download (don't change these).
-fingerprint=4474376DA30B98D6FC34D217348CC5A7E89CC1CD   # Master fingerprint, see below
-project=git-workflow
-username=joshua-hvmn
-repo=$username/$project
-package=$project-$version
-tarball=$package.tar.gz
-signature=$tarball.sig
-base=https://github.com/$repo/releases/download/$version
-
-# Download the source code and the signature file.
-curl -LO "$base/$tarball" -LO "$base/$signature"
-```
-
-#### Step 2: Verify the tarball was signed by me.
-
-_Note: validate my master identity outside of this repository if you are paranoid._
-
-```
-# GPG: Fetch the key and verify the signature, you can skip this if you have gh,
-# use the command below this block.
-gpg --keyserver keyserver.ubuntu.com --recv-keys "$fingerprint"
-if gpg --verify "$signature" "$tarball"; then
-    package_validated=true
-else
-    echo "FATAL ERROR: packaged signature failure. Do not extract this package."
-fi
-```
-
-_Alternatively, if you have gh and are logged in, you can run:_ `gh attestation verify "$tarball" --repo $repo`.
-
-**Signing key**:
-
-```
-1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A
-```
-
-**Master fingerprint / identity**:
-
-```
-4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD
-```
-
-The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA key" line
-shows the signing key, not the master fingerprint that is actually used to verify the tarball. The reason
-this architecture exists is so I can revoke the signing key for this repository (only) if it is compromised.
-
-#### Step 3: Unpack and install git-workflow
+### From a release
 
 ```sh
-[[ "$package_validated" == "true" ]] && tar xzf "$tarball" && cd "$package"
+version=vX.Y.Z    # the release to install
+base=https://github.com/joshua-hvmn/git-workflow/releases/download/$version
+curl -LO "$base/git-workflow-$version.tar.gz" -LO "$base/git-workflow-$version.tar.gz.sig"
+gpg --keyserver keyserver.ubuntu.com --recv-keys 4474376DA30B98D6FC34D217348CC5A7E89CC1CD  # once
+gpg --verify "git-workflow-$version.tar.gz.sig" "git-workflow-$version.tar.gz" &&
+    tar xzf "git-workflow-$version.tar.gz" && cd "git-workflow-$version"
+sudo make install    # into /usr/local; or for just you: make install PREFIX="$HOME/.local"
 ```
 
-```
-sudo make install                   # into /usr/local
-```
+[Verifying a release](#verifying-a-release) explains the key. The tarball includes the tests:
+`make check` runs them before you install.
 
-Or, locally: `make install PREFIX="$HOME/.local"`
-
-### **From a clone, for hacking on it:**
+### From a clone, for hacking on it
 
 ```sh
 git clone https://github.com/joshua-hvmn/git-workflow.git && cd git-workflow
@@ -110,7 +81,7 @@ make link                 # symlinks the program into ~/.local/bin; edits take e
 make unlink               # undo
 ```
 
-### Extra Installation steps:
+### Aliases
 
 **Aliases** are opt-in, because they edit your `~/.gitconfig`:
 
@@ -129,6 +100,15 @@ copy). The rest of this README uses the default names.
 
 Then `git workflow version` shows what's installed, `git workflow help` lists the commands with
 your alias for each, and `man git-workflow` is the manual.
+
+### Tab completion
+
+`make install` puts a bash completion where bash-completion finds it, and git's own completion
+loads it the first time you complete a `git workflow` command. It completes the commands,
+`git b` subcommands, `start` modes and branch names, through your aliases too (`git b fi<TAB>`).
+From a clone, source `completion/git-workflow.bash` from `~/.bashrc`, after git's completion.
+
+### Uninstalling and upgrading
 
 `make uninstall` (with the same `PREFIX`) removes an install; your alias copies stay, and
 `make unaliases` stops including them. `make help` lists every target.
@@ -187,15 +167,15 @@ what would happen.
 
 `git b` is `git workflow branch`
 
-| Command                                       | Description                                                           |
-| --------------------------------------------- | --------------------------------------------------------------------- |
-| `git b`                                       | `git branch` (anything unrecognized passes through, e.g. `git b -vv`) |
-| `git b start <topic\|release\|hotfix> [name]` | start a branch from the right base and push it                        |
-| `git b pre [label\|tag] [-n] [-l]`            | tag the release branch as a prerelease and push the tag               |
-| `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch    |
-| `git b delete [branch] [-y] [-f]`             | delete locally and on the remote                                      |
-| `git b config` / `git b help`                 | settings / usage                                                      |
-| `git workflow version`                        | installed version (from `VERSION`)                                    |
+| Command                                       | Description                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `git b`                                       | `git branch` (options pass through, e.g. `git b -vv`)              |
+| `git b start <topic\|release\|hotfix> [name]` | start a branch from the right base and push it                     |
+| `git b pre [label\|tag] [-n] [-l]`            | tag the release branch as a prerelease and push the tag            |
+| `git b finish [branch]`                       | merge per the flow, tag releases/hotfixes, push, delete the branch |
+| `git b delete [branch] [-y] [-f]`             | delete locally and on the remote                                   |
+| `git b config` / `git b help`                 | settings / usage                                                   |
+| `git workflow version`                        | installed version (from `VERSION`)                                 |
 
 ### start
 
@@ -341,28 +321,8 @@ Designed to feed a tag-triggered release workflow. This repo releases itself wit
 - the tag's version must match the `VERSION` file, so bump it on the release branch before
   `git b pre` (`pre` and `finish` check this locally too, before anything is public)
 - release notes come from the matching `## vX.Y.Z` section of `CHANGELOG.md`
-
-## Packaging
-
-Everything a package needs goes through standard `make` variables:
-
-```sh
-make check                                  # test suite (bats-core)
-make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
-```
-
-| Path (`PREFIX=/usr`)                  | Contents                                                    |
-| ------------------------------------- | ----------------------------------------------------------- |
-| `/usr/bin/git-workflow`               | the program                                                 |
-| `/usr/share/git-workflow/`            | sourced libraries and `VERSION`                             |
-| `/usr/share/git-workflow/commands/`   | one file per command, sourced by the program                |
-| `/usr/share/git-workflow/aliases/`    | the default alias sets                                      |
-| `/usr/share/man/man1/git-workflow*.1` | man pages (`git workflow help <command>` opens a command's) |
-| `/usr/share/doc/git-workflow/`        | README, CHANGELOG, LICENSE                                  |
-
-`BINDIR`, `DATADIR`, `DOCDIR` and `MANDIR` can be overridden individually. `make install`
-never touches `$HOME` or `~/.gitconfig`, and removes 1.x files from the same `PREFIX`. Release
-tarballs include the tests.
+- the publish job checks the tarball against the hash the build job computed, so a tarball
+  that changed in artifact storage is never signed
 
 The publish job runs in a `release` environment, so a copy of the workflow needs one
 (Settings → Environments), with:
@@ -376,11 +336,61 @@ Before signing, it fetches the published key, so extending the subkey's expiry o
 `gpg --send-keys`, not a new secret. It fails if the published key can't verify the
 signature, and warns 60 days before the key expires.
 
+## Verifying a release
+
+Every release tarball is signed, and its build provenance is attested by GitHub.
+
+**Master fingerprint / identity** (validate it outside this repository if you are paranoid):
+
+```
+4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD
+```
+
+**Signing key**:
+
+```
+1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A
+```
+
+The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA
+key" line shows the signing key, not the master fingerprint that is actually used to verify the
+tarball. The reason this architecture exists is so I can revoke the signing key for this
+repository (only) if it is compromised.
+
+With `gh` logged in, you can check the provenance instead:
+`gh attestation verify git-workflow-vX.Y.Z.tar.gz --repo joshua-hvmn/git-workflow`.
+
+## Packaging
+
+Everything a package needs goes through standard `make` variables:
+
+```sh
+make check                                  # test suite (bats-core)
+make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
+```
+
+| Path (`PREFIX=/usr`)                                  | Contents                                                    |
+| ----------------------------------------------------- | ----------------------------------------------------------- |
+| `/usr/bin/git-workflow`                               | the program                                                 |
+| `/usr/share/git-workflow/`                            | sourced libraries and `VERSION`                             |
+| `/usr/share/git-workflow/commands/`                   | one file per command, sourced by the program                |
+| `/usr/share/git-workflow/aliases/`                    | the default alias sets                                      |
+| `/usr/share/man/man1/git-workflow*.1`                 | man pages (`git workflow help <command>` opens a command's) |
+| `/usr/share/bash-completion/completions/git-workflow` | bash completion, loaded by git's own                        |
+| `/usr/share/doc/git-workflow/`                        | README, CHANGELOG, LICENSE                                  |
+
+`BINDIR`, `DATADIR`, `DOCDIR`, `MANDIR` and `COMPLETIONDIR` can be overridden individually.
+`make install` never touches `$HOME` or `~/.gitconfig`, and removes 1.x files from the same
+`PREFIX`. Release tarballs include the tests.
+
+[`packaging/`](packaging/) has an AUR `PKGBUILD` and a Homebrew formula built this way, and
+how to publish each.
+
 ## Development
 
 ```sh
 make link           # run your checkout as the installed program
-make lint           # shellcheck (+ mandoc for the man pages, if installed)
+make lint           # shellcheck, plus shfmt and mandoc when they're installed
 make test           # bats suite (needs bats-core: pacman -S bash-bats / apt install bats / brew install bats-core)
 make installcheck   # install into a temp dir and run the suite against that copy
 ```

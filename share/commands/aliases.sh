@@ -21,7 +21,7 @@ DEFAULTS_DIR="$GIT_WORKFLOW_DATADIR/aliases"
 USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/git-workflow/aliases"
 
 aliases_usage() {
-    cat >&2 <<EOF
+    cat <<EOF
 usage: git workflow aliases [list]
        git workflow aliases install [<set>...]
        git workflow aliases reset <set>...

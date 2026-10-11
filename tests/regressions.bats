@@ -64,7 +64,7 @@ load test_helper
     [ "$status" -eq 0 ]
     [[ "$output" == *"Created local 'next' tracking 'origin/next'"* ]]
     [ "$(git branch --show-current)" = "foo" ]
-    [ "$(git rev-parse --abbrev-ref next@{upstream})" = "origin/next" ]
+    [ "$(git rev-parse --abbrev-ref 'next@{upstream}')" = "origin/next" ]
 }
 
 @test "finish: refuses to run with uncommitted tracked changes" {
@@ -105,7 +105,7 @@ load test_helper
 
     run git ps
     [ "$status" -eq 0 ]
-    [ "$(git rev-parse --abbrev-ref feat@{upstream})" = "upstream/feat" ]
+    [ "$(git rev-parse --abbrev-ref 'feat@{upstream}')" = "upstream/feat" ]
 }
 
 @test "qc p: pushes to workflow.remote" {
@@ -599,4 +599,50 @@ load test_helper
     [ "$status" -ne 0 ]
     [[ "$output" == *"one release branch at a time"* ]]
     no_local_branch release-v1.2.0
+}
+
+# --- v2.1.0 ------------------------------------------------------------------
+
+@test "b: a mistyped subcommand is an error, not a new branch" {
+    run git b finsh
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"'finsh' is not a git b subcommand"* ]]
+    no_local_branch finsh
+
+    run git b delte main
+    [ "$status" -ne 0 ]
+    no_local_branch delte
+
+    # options still go to git branch
+    run git b -a
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"remotes/origin/next"* ]]
+}
+
+@test "a prompt answered with end of input says Aborted once" {
+    echo x >>a
+    git add a
+    run git c fix </dev/null
+    [ "$status" -ne 0 ]
+    [ "$(grep -c '^Aborted\.$' <<<"$output")" -eq 1 ]
+
+    local_next
+    git b start topic foo >/dev/null 2>&1
+    git commit -qm work
+    run git b finish </dev/null
+    [ "$status" -ne 0 ]
+    [ "$(grep -c '^Aborted\.$' <<<"$output")" -eq 1 ]
+}
+
+@test "finish doesn't switch to the branch you're already on" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    git b pre <<<$'y\ny' >/dev/null 2>&1
+    git b pre <<<$'y\ny' >/dev/null 2>&1
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Already on"* ]]
+    [[ "$output" == *"Prereleases for v1.1.0: v1.1.0-rc.1 v1.1.0-rc.2"$'\n'* ]]
 }

@@ -10,19 +10,19 @@
 
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 
-QC_MODE=""
+push_after=""
 case "${1:-}" in
 p | -p | --push)
-    QC_MODE="p"
+    push_after="p"
     shift
     ;;
 esac
 
-[ "$QC_MODE" = "p" ] && require_branch
+[ "$push_after" = "p" ] && require_branch
 detect_protected_branch "commit"
-commit_function "$@"
-conditional_rb_pull
+commit_changes "$@"
+pull_current_branch
 
-if [ "$QC_MODE" = "p" ]; then
+if [ "$push_after" = "p" ]; then
     git push -u "$REMOTE" "$working_branch"
 fi

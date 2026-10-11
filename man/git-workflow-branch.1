@@ -28,11 +28,22 @@ git-workflow-branch \- start, prerelease, finish and delete branches following t
 |
 .B version
 .SH DESCRIPTION
-With no subcommand, or one it doesn't recognize,
+With no subcommand, or with options
+.RB ( \-a ,
+.BR \-vv ,
+.B \-d
+.IR branch ,
+\&...),
 .B git workflow branch
 runs
 .BR git\-branch (1)
 with the same arguments.
+Any other word is refused as an unknown subcommand, so a mistyped one
+.RB ( "finsh" )
+is not quietly created as a branch; use
+.B git branch
+.I name
+to create a branch outside the flow.
 .PP
 With the default aliases
 .RB ( "git workflow aliases install" )
