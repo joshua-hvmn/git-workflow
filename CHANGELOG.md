@@ -12,6 +12,9 @@
 
 ### Changed
 
+- `git b <word>` no longer passes an unknown word to `git branch`: a mistyped subcommand
+  (`git b finsh`) used to create a branch by that name. Options still pass through
+  (`git b -vv`); create a branch outside the flow with `git branch <name>`.
 - `git workflow help`, `git b help`, `git b pre -h`, `git workflow aliases help` and
   `git b config` print to standard output, so they can be piped (`git b config | grep remote`).
   Errors and the usage printed after one still go to standard error.
@@ -23,8 +26,6 @@
 
 ### Fixed
 
-- A mistyped `git b` subcommand no longer creates a branch: `git b finsh` passed `finsh` to
-  `git branch`. Options still pass through (`git b -vv`); any other word is an error.
 - Answering a prompt with end of input (Ctrl-D) printed "Aborted." twice.
 - `git b finish` no longer prints git's "Already on '<branch>'".
 
