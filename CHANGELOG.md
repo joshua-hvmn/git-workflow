@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.1.0
+
+### Added
+
+- Tab completion for bash: `git workflow` commands, `git b` subcommands, `start` modes,
+  branch names for `finish`, `delete`, `pull` and `sync`, and the alias sets, through your
+  aliases too (`git b fi<TAB>`). `make install` puts it in `COMPLETIONDIR`
+  (`<prefix>/share/bash-completion/completions`), where git's completion loads it.
+- `packaging/`: an AUR `PKGBUILD` and a Homebrew formula, and how to publish them.
+
+### Changed
+
+- `git workflow help`, `git b help`, `git b pre -h`, `git workflow aliases help` and
+  `git b config` print to standard output, so they can be piped (`git b config | grep remote`).
+  Errors and the usage printed after one still go to standard error.
+- `git workflow help <command>` and `--help` open the checkout's own page when run from a
+  checkout (`make link`), where `man` alone couldn't find it.
+- The release workflow's publish job checks the tarball against the hash the build job
+  computed before signing it, and Dependabot keeps the pinned actions up to date.
+- `make lint` also checks formatting with `shfmt` and shellchecks the tests, when installed.
+
+### Fixed
+
+- A mistyped `git b` subcommand no longer creates a branch: `git b finsh` passed `finsh` to
+  `git branch`. Options still pass through (`git b -vv`); any other word is an error.
+- Answering a prompt with end of input (Ctrl-D) printed "Aborted." twice.
+- `git b finish` no longer prints git's "Already on '<branch>'".
+
 ## v2.0.0
 
 ### Changed

@@ -8,15 +8,15 @@
 # Modify & distribute freely.
 
 # Include guard to prevent redundant parsing
-if [ -n "${__BRANCH_UTILS_LOADED:-}" ]; then
+if [ -n "${__WF_FLOW_LOADED:-}" ]; then
     return 0
 fi
-__BRANCH_UTILS_LOADED=1
+__WF_FLOW_LOADED=1
 
-if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
+if [ -z "${__WF_CORE_LOADED:-}" ]; then
     . "$GIT_WORKFLOW_DATADIR/core.sh"
 fi
-if [ -z "${__RELEASE_UTILS_LOADED:-}" ]; then
+if [ -z "${__WF_RELEASE_LOADED:-}" ]; then
     . "$GIT_WORKFLOW_DATADIR/release.sh"
 fi
 
@@ -126,7 +126,7 @@ start_branch() {
     fi
 
     info "Starting $new_branch_type branch '$full_branch_name' from '$base_branch'..."
-    rb_pull_function "$base_branch" || return 1
+    pull_branch "$base_branch" || return 1
     git switch -c "$full_branch_name" "$base_branch" || return 1
     git push -u "$REMOTE" "$full_branch_name"
 }
@@ -179,7 +179,10 @@ finish_topic_pr() {
         note "A pull request for '$branch' is already open: $url"
         return 0
     fi
-    yes_no "Open a pull request from '$branch' into '$DEV_BRANCH'?" "y" || return 1
+    yes_no "Open a pull request from '$branch' into '$DEV_BRANCH'?" "y" || {
+        info "Aborted."
+        return 1
+    }
     gh pr create --base "$DEV_BRANCH" --head "$branch" --fill
 }
 
@@ -191,9 +194,12 @@ finish_topic() {
         return
     fi
 
-    yes_no "Merge '$branch' into $DEV_BRANCH and push?" || return 1
+    yes_no "Merge '$branch' into $DEV_BRANCH and push?" || {
+        info "Aborted."
+        return 1
+    }
 
-    if ! rb_pull_function "$DEV_BRANCH"; then
+    if ! pull_branch "$DEV_BRANCH"; then
         git switch --quiet "$branch" 2>/dev/null || :
         return 1
     fi
@@ -220,7 +226,7 @@ finish_topic() {
 
 finish_release() {
     local branch="$1" type="$2"
-    local version push_refs open_releases main_before="" dev_before=""
+    local version push_refs open_releases question main_before="" dev_before=""
 
     version=$(branch_version "$branch")
     validate_new_version "$version" || return 1
@@ -229,7 +235,7 @@ finish_release() {
     if [ -z "$(prerelease_tags_for "$version")" ]; then
         note "No prereleases were cut for $version ($(wf_cmd branch pre)). Releasing untested artifacts."
     else
-        note "Prereleases for $version: $(prerelease_tags_for "$version" | tr '\n' ' ')"
+        note "Prereleases for $version: $(prerelease_tags_for "$version" | paste -sd ' ' -)"
     fi
 
     if [ "$type" = "hotfix" ] && [ "$TRUNK_MODE" -eq 0 ]; then
@@ -240,12 +246,16 @@ finish_release() {
     fi
 
     if [ "$TRUNK_MODE" -eq 1 ]; then
-        yes_no "Merge '$branch' into $MAIN_BRANCH, tag $version, and push?" || return 1
+        question="Merge '$branch' into $MAIN_BRANCH, tag $version, and push?"
     else
-        yes_no "Merge '$branch' into $MAIN_BRANCH and $DEV_BRANCH, tag $version, and push?" || return 1
+        question="Merge '$branch' into $MAIN_BRANCH and $DEV_BRANCH, tag $version, and push?"
     fi
+    yes_no "$question" || {
+        info "Aborted."
+        return 1
+    }
 
-    if ! rb_pull_function "$MAIN_BRANCH"; then
+    if ! pull_branch "$MAIN_BRANCH"; then
         git switch --quiet "$branch" 2>/dev/null || :
         return 1
     fi
@@ -265,7 +275,7 @@ finish_release() {
 
     # git flow: back-merge main into devBranch so the release (and its tag) are on it
     if [ "$TRUNK_MODE" -eq 0 ]; then
-        if ! rb_pull_function "$DEV_BRANCH"; then
+        if ! pull_branch "$DEV_BRANCH"; then
             finish_rollback "$branch" "$version" "$main_before" || return 1
             info "Rolled back; you are on '$branch'. Fix '$DEV_BRANCH' (see above), then run '$(wf_cmd branch finish)' again."
 
@@ -318,7 +328,7 @@ finish_branch() {
     "$HOTFIX_PREFIX"*) type="hotfix" ;;
     esac
 
-    rb_pull_function "$branch" || return 1
+    pull_branch "$branch" || return 1
 
     if [ "$type" = "topic" ]; then
         finish_topic "$branch"
@@ -434,7 +444,7 @@ delete_branch() {
 show_config() {
     local flow="git flow"
     [ "$TRUNK_MODE" -eq 1 ] && flow="trunk / GitHub flow (devBranch = mainBranch)"
-    cat >&2 <<EOF
+    cat <<EOF
 git-workflow settings (git config workflow.<key>):
   flow             $flow
   mainBranch       $MAIN_BRANCH

@@ -13,5 +13,5 @@
 # MAIN
 info "Fetching all remotes and pruning dead branches..."
 git fetch --all --prune --tags
-__SYNCED=1 # already fetched, stops rb_pull_function from fetching again
-rb_pull_function "$@"
+__SYNCED=1 # already fetched, stops pull_branch from fetching again
+pull_branch "$@"

@@ -35,30 +35,35 @@ GIT             ?= git
 BATS            ?= bats
 SHELLCHECK      ?= shellcheck
 MANDOC          ?= mandoc
+SHFMT		?= shfmt
 
 # --- Install locations --------------------------------------------------------
 # Everything but the program is sourced Bash or text, the same on every
 # architecture, so it goes in share/ (lib/ is for architecture-dependent files).
 
-DESTDIR ?=
-PREFIX  ?= /usr/local
-BINDIR  ?= $(PREFIX)/bin
-DATADIR ?= $(PREFIX)/share/$(NAME)
-DOCDIR  ?= $(PREFIX)/share/doc/$(NAME)
-MANDIR  ?= $(PREFIX)/share/man
-LINKDIR ?= $(HOME)/.local/bin
+DESTDIR		?=
+PREFIX		?= /usr/local
+BINDIR		?= $(PREFIX)/bin
+DATADIR		?= $(PREFIX)/share/$(NAME)
+DOCDIR		?= $(PREFIX)/share/doc/$(NAME)
+MANDIR		?= $(PREFIX)/share/man
+COMPLETIONDIR   ?= $(PREFIX)/share/bash-completions/completions
+LINKDIR		?= $(HOME)/.local/bin
 
 # Alias sets for `make aliases` / `make unaliases` (empty: install/uninstall defaults)
 SETS ?=
 
 # --- Files --------------------------------------------------------------------
 
-PROGRAM  := bin/$(NAME)
-LIBS     := $(wildcard share/*.sh) VERSION
-COMMANDS := $(wildcard share/commands/*.sh)
-ALIASES  := $(wildcard share/aliases/*)
-MAN1     := $(wildcard man/*.1)
-DOCS     := README.md CHANGELOG.md LICENSE
+PROGRAM		:= bin/$(NAME)
+LIBS		:= $(wildcard share/*.sh) VERSION
+COMMANDS	:= $(wildcard share/commands/*.sh)
+ALIASES		:= $(wildcard share/aliases/*)
+MAN1		:= $(wildcard man/*.1)
+DOCS		:= README.md CHANGELOG.md LICENSE
+COMPLETION	:= completion/$(NAME).bash
+SHFMT_FLAGS	:= -i 4
+SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh) $(COMPLETION) tests/test_helper.bash
 
 # What 1.x installed and 2.0 doesn't: the git-* commands, their libraries
 # (in DATADIR since 1.4.2, in PREFIX/lib/git-workflow before), the alias file
@@ -78,7 +83,7 @@ DIST_NAME ?= $(NAME)-$(VERSION)
 
 # Only bash expands the ~ in PREFIX=~/.local. fish, zsh and sh pass it through,
 # and the recipes would then create a directory literally named "~" in this one.
-ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(LINKDIR)),)
+ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(COMPLETIONDIR)$(LINKDIR)),)
   $(error A path contains a "~" that your shell did not expand. Use $$HOME instead: PREFIX="$$HOME/.local")
 endif
 
@@ -173,6 +178,7 @@ help:
 		PREFIX  '$(PREFIX)'  DESTDIR '$(or $(DESTDIR),(none))' \
 		BINDIR  '$(BINDIR)'  DATADIR '$(DATADIR)' \
 		DOCDIR  '$(DOCDIR)'  MANDIR  '$(MANDIR)' \
+		COMPLETIONDIR '$(COMPLETIONDIR)' \
 		LINKDIR '$(LINKDIR)' SETS    '$(or $(SETS),(defaults))'
 
 ##@ Install
@@ -180,12 +186,15 @@ help:
 install: all ## Install the program, its libraries and commands, the man pages and docs
 	$(Q)$(remove_1x)
 	$(Q)$(MKDIR_P) "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/commands" \
-		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1"
+		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" \
+		"$(DESTDIR)$(COMPLETIONDIR)"
 	$(Q)$(call install_files,$(DATADIR),$(INSTALL_DATA),$(LIBS))
 	$(Q)$(call install_files,$(DATADIR)/commands,$(INSTALL_DATA),$(COMMANDS))
 	$(Q)$(call install_files,$(DATADIR)/aliases,$(INSTALL_DATA),$(ALIASES))
 	$(Q)$(call install_files,$(DOCDIR),$(INSTALL_DATA),$(DOCS))
 	$(Q)$(call install_files,$(MANDIR)/man1,$(INSTALL_DATA),$(MAN1))
+	@$(say) INSTALL "$(DESTDIR)$(COMPLETIONDIR)/$(NAME)"
+	$(Q)$(INSTALL_DATA) "$(COMPLETION)" "$(DESTDIR)$(COMPLETIONDIR)/$(NAME)"
 # The program last, so an interrupted install never leaves a program that
 # can't find the rest. Its empty GIT_WORKFLOW_DATADIR= line (a checkout leaves
 # it empty and looks in ../share) gets DATADIR. awk rather than sed: DATADIR
@@ -213,6 +222,7 @@ uninstall: ## Remove what install put in PREFIX, and anything 1.x left there
 	$(Q)$(call remove_files,$(DATADIR)/aliases,$(notdir $(ALIASES)))
 	$(Q)$(call remove_files,$(DOCDIR),$(DOCS))
 	$(Q)$(call remove_files,$(MANDIR)/man1,$(notdir $(MAN1)))
+	$(Q)$(call remove_files,$(COMPLETIONDIR),$(NAME))
 	$(Q)$(remove_1x)
 # Only this project's own directories, and only once they're empty
 	$(Q)$(call remove_dir,$(DATADIR)/commands); $(call remove_dir,$(DATADIR)/aliases); \
@@ -245,11 +255,19 @@ unlink: ## Remove that symlink (only if it points into this checkout)
 	fi
 	$(Q)$(unlink_1x)
 
-lint: ## Shellcheck the program, libraries, commands and test helper; lint the man pages
-	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh"
-	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh
-	@$(say) LINT tests/test_helper.bash
+lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the man pages
+	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh $(COMPLETION)"
+	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh $(COMPLETION)
+	@$(say) LINT "tests/*"
 	$(Q)$(SHELLCHECK) -s bash tests/test_helper.bash
+	$(Q)$(SHELLCHECK) tests/*.bats
+	$(Q)if command -v $(SHFMT) >/dev/null 2>&1; then \
+		$(say) FORMAT "the code and tests"; \
+		$(SHFMT) $(SHFMT_FLAGS) -d $(SHELL_FILES) && \
+		$(SHFMT) $(SHFMT_FLAGS) -ln bats -d tests/*.bats; \
+	else \
+		echo "note: $(SHFMT) is not installed, so formatting was not checked"; \
+	fi
 	$(Q)if command -v $(MANDOC) >/dev/null 2>&1; then \
 		$(say) LINT "man/*"; \
 		$(MANDOC) -Tlint -W warning $(MAN1); \

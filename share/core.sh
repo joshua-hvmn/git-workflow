@@ -11,10 +11,10 @@
 # globals here are consumed by the scripts that source this file
 
 # Include guard to prevent redundant parsing
-if [ -n "${__CORE_UTILS_LOADED:-}" ]; then
+if [ -n "${__WF_CORE_LOADED:-}" ]; then
     return 0
 fi
-__CORE_UTILS_LOADED=1
+__WF_CORE_LOADED=1
 
 # OUTPUT HELPERS
 if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -218,8 +218,10 @@ yes_no() {
         ;;
     esac
     while :; do
+        # End of input (Ctrl-D, or no terminal) declines; the caller says
+        # what was aborted, so only end the prompt's line here
         if ! read -r -p "$yn_message $yn_options: " REPLY; then
-            printf '\nAborted.\n' >&2
+            printf '\n' >&2
             return 1
         fi
 
@@ -328,12 +330,12 @@ commit_pre_checks() {
     fi
     commit_message_check "$@" || return 1
 }
-# commit_function [--amend] [--] [message words...]
+# commit_changes [--amend] [--] [message words...]
 # The message is plain words, so anything else starting with "-" is almost
 # certainly a `git commit` flag typed from habit: `git c -m "fix"` (the alias) would
 # otherwise commit the message "-m fix". Put -- before a message that really
 # starts with a dash.
-commit_function() {
+commit_changes() {
     local amend=""
 
     if [ "${1:-}" = "--amend" ]; then
@@ -390,7 +392,7 @@ remote_branch_exists() {
 }
 
 # git workflow pull: switch to a branch and bring it up to date with the remote
-rb_pull_function() {
+pull_branch() {
     local current="${1:-$working_branch}"
     if [ -z "$current" ]; then
         err "Not on a branch."
@@ -399,7 +401,9 @@ rb_pull_function() {
 
     sync_remote
 
-    git switch "$current" || return 1
+    if [ "$(get_working_branch)" != "$current" ]; then
+        git switch "$current" || return 1
+    fi
 
     remote_branch_exists "$current" || return 0
 
@@ -422,11 +426,11 @@ rb_pull_function() {
     fi
 }
 
-conditional_rb_pull() {
+pull_current_branch() {
     sync_remote
     if remote_branch_exists "$working_branch"; then
         info "Branch exists on remote. Syncing..."
-        rb_pull_function "$working_branch"
+        pull_branch "$working_branch"
     fi
 }
 

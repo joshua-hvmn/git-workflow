@@ -98,7 +98,10 @@ Set up, list, reset or remove the alias sets. See
 .BR git\-workflow\-aliases (1).
 .TP
 .B help \fR[\fIcommand\fR]
-List the commands, with your alias for each, or open a command's manual page.
+List the commands, with your alias for each, or open a command's manual page
+(from a checkout, the page in its
+.I man/
+directory).
 .TP
 .B version
 Show the installed version.
@@ -238,6 +241,14 @@ general-purpose ones
 .TP
 .I <prefix>/share/git\-workflow/aliases/
 The defaults they are copied from.
+.TP
+.I <prefix>/share/bash\-completion/completions/git\-workflow
+Bash completion for
+.B git workflow
+and the aliases that run it. Git's own completion loads it the first time
+it completes a
+.B git workflow
+command.
 .SH SEE ALSO
 .BR git\-workflow\-branch (1),
 .BR git\-workflow\-commit (1),

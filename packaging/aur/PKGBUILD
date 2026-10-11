@@ -1,0 +1,34 @@
+# Maintainer: Joshua Haveman <192386592+joshua-hvmn@users.noreply.github.com>
+#
+# Builds from the signed release tarball. makepkg checks the signature against
+# the primary key below; the tarball is signed by its repo-only subkey,
+# 1CEAA8B4D3B8749EB3489943AEA64E977A5B316A. Import the key once with:
+#   gpg --recv-keys 4474376DA30B98D6FC34D217348CC5A7E89CC1CD
+
+pkgname=git-workflow
+_name=git-workflow # the project and tarball name, if pkgname ever differs
+pkgver=2.0.0
+pkgrel=1
+pkgdesc='Git flow or trunk flow with guardrails, SemVer prerelease tags and atomic releases'
+arch=('any')
+url='https://github.com/joshua-hvmn/git-workflow'
+license=('MIT')
+depends=('bash' 'git')
+optdepends=('github-cli: open pull requests on finish (workflow.finishTopic=pr)'
+    'bash-completion: tab completion')
+checkdepends=('bash-bats')
+source=("$url/releases/download/v$pkgver/$_name-v$pkgver.tar.gz"{,.sig})
+sha256sums=('3c83fbe70f7d509ce368753242a7b5e486a1432b3fd18cecaa65a99d34e22d50'
+    'SKIP')
+validpgpkeys=('4474376DA30B98D6FC34D217348CC5A7E89CC1CD') # Joshua Haveman
+
+check() {
+    cd "$_name-v$pkgver"
+    make check
+}
+
+package() {
+    cd "$_name-v$pkgver"
+    make PREFIX=/usr DESTDIR="$pkgdir" install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
