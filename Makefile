@@ -47,7 +47,7 @@ BINDIR		?= $(PREFIX)/bin
 DATADIR		?= $(PREFIX)/share/$(NAME)
 DOCDIR		?= $(PREFIX)/share/doc/$(NAME)
 MANDIR		?= $(PREFIX)/share/man
-COMPLETIONDIR   ?= $(PREFIX)/share/bash-completions/completions
+COMPLETIONDIR   ?= $(PREFIX)/share/bash-completion/completions
 LINKDIR		?= $(HOME)/.local/bin
 
 # Alias sets for `make aliases` / `make unaliases` (empty: install/uninstall defaults)
