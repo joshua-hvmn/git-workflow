@@ -15,7 +15,7 @@ Plain Bash plus `git`. No config file to parse: settings live in `git config`.
 $ git b start release v1.3.0
 Starting release branch 'release/v1.3.0' from 'next'...
 Switched to a new branch 'release/v1.3.0'
-$ echo v1.3.0 >VERSION && git c bump version to v1.3.0
+$ echo v1.3.0 >VERSION && git aa && git c bump version to v1.3.0
 [release/v1.3.0 de4936e] bump version to v1.3.0
 $ git b pre
 Push 1 local commit(s) to 'origin/release/v1.3.0' first? [Y/n]: y
@@ -39,13 +39,13 @@ Aborted.
 _A real session, with most of git's own output left out._
 
 ```
-next ──●────●──────────────────●───────  ← topic branches merge here
-        \                     / (back-merge)
-release/v1.2.0 ──●──●────●───┘
-                 │  │    │
-            rc.1 ┘  rc.2 ┘   ← git b pre: tag + push → CI builds a GitHub *prerelease*
-                          \
-main ──────────────────────●── v1.2.0   ← git b finish: merge, tag, push atomically
+next ──●─────────────────────●──  ← topic branches merge here
+        \                   /     ← back-merge: main into next
+         ●────●────●       /      release/v1.2.0
+              │    │\     /
+           rc.1 rc.2 \   /        ← git b pre: tag + push → CI builds a GitHub prerelease
+                      \ /
+main ──────────────────●────────  v1.2.0  ← git b finish: merge, tag, push atomically
 ```
 
 ## Install
@@ -81,9 +81,9 @@ make link                 # symlinks the program into ~/.local/bin; edits take e
 make unlink               # undo
 ```
 
-### Aliases
+### Setting up the aliases
 
-**Aliases** are opt-in, because they edit your `~/.gitconfig`:
+The aliases are opt-in, because they edit your `~/.gitconfig`:
 
 ```sh
 git workflow aliases install         # or, from the source directory: make aliases
@@ -106,7 +106,7 @@ your alias for each, and `man git-workflow` is the manual.
 `make install` puts a bash completion where bash-completion finds it, and git's own completion
 loads it the first time you complete a `git workflow` command. It completes the commands,
 `git b` subcommands, `start` modes and branch names, through your aliases too (`git b fi<TAB>`).
-From a clone, source `completion/git-workflow.bash` from `~/.bashrc`, after git's completion.
+From a clone, source `completion/git-workflow.bash` from `~/.bashrc`.
 
 ### Uninstalling and upgrading
 
@@ -177,6 +177,9 @@ what would happen.
 | `git b config` / `git b help`                 | settings / usage                                                   |
 | `git workflow version`                        | installed version (from `VERSION`)                                 |
 
+Only options go to `git branch`. Any other word is refused, so a typo like `git b finsh` is an
+error instead of a new branch named `finsh`. Use `git branch <name>` for a branch outside the flow.
+
 ### start
 
 - **topic**: branch from `devBranch`
@@ -241,13 +244,13 @@ aren't merged into main or dev needs `-f`. Protected branches are never deleted.
 
 ## Other commands
 
-Each is short for a `git workflow` command: `c` for `commit`, `qc` for `quick-commit`, `ps` for
-`push`, `sync`, `rb-pull` for `pull`, and `sq` for `squash`.
+Each is an alias for a `git workflow` command: `c` for `commit`, `qc` for `quick-commit`, `ps`
+for `push`, `rb-pull` for `pull` and `sq` for `squash`; `sync` keeps its name.
 
 | Command                     | Description                                                                              |
 | --------------------------- | ---------------------------------------------------------------------------------------- |
 | `git c [--amend] [message]` | commit; offers `git add -A` if nothing is staged. `--amend` alone keeps the message      |
-| `git qc [p] [message]`      | protected-branch check, commit, rebase onto the remote branch, optionally push (`p`)     |
+| `git qc [p] [message]`      | protected-branch check, commit, sync with the remote branch, optionally push (`p`)       |
 | `git ps [force]`            | sync with the remote, then `push -u`; `force` → `--force-with-lease --force-if-includes` |
 | `git sync [branch]`         | `fetch --all --prune --tags`, then bring the branch up to date (see below)               |
 | `git rb-pull [branch]`      | switch to a branch and bring it up to date with the remote                               |
@@ -340,22 +343,22 @@ signature, and warns 60 days before the key expires.
 
 Every release tarball is signed, and its build provenance is attested by GitHub.
 
-**Master fingerprint / identity** (validate it outside this repository if you are paranoid):
+**Primary key**, the one to trust (confirm it somewhere other than this repository):
 
 ```
 4474 376D A30B 98D6 FC34  D217 348C C5A7 E89C C1CD
 ```
 
-**Signing key**:
+**Signing subkey**, used only for this repository's releases:
 
 ```
 1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A
 ```
 
-The tarball signing key for this repository is a subkey of my master key, so gpg's "using EDDSA
-key" line shows the signing key, not the master fingerprint that is actually used to verify the
-tarball. The reason this architecture exists is so I can revoke the signing key for this
-repository (only) if it is compromised.
+gpg's "using EDDSA key" line names the signing subkey. Unless you've certified the key, gpg also
+warns that it isn't certified and prints both fingerprints: "Primary key fingerprint" should match
+the primary key above, and "Subkey fingerprint" the signing subkey. Each repository has its own
+subkey, so a compromised one can be revoked without affecting the primary key or other projects.
 
 With `gh` logged in, you can check the provenance instead:
 `gh attestation verify git-workflow-vX.Y.Z.tar.gz --repo joshua-hvmn/git-workflow`.
