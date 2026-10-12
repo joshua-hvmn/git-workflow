@@ -23,6 +23,16 @@ if [ -z "$GIT_WORKFLOW_DATADIR" ]; then
 fi
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 
+# Open a manual page. In a checkout (or a `make link` install) the pages are
+# in ../man, where man wouldn't look; installed, they're where man looks.
+wf_man() {
+    local page="$GIT_WORKFLOW_DATADIR/../man/$1.1"
+    if [ -r "$page" ]; then
+        exec man "$page"
+    fi
+    exec man "$1"
+}
+
 # The middle column is your alias for each command, if you have one
 workflow_usage() {
     local cmd summary alias name
@@ -62,10 +72,10 @@ help | -h)
         err "there is no git workflow command '$2'. See: git workflow help"
         exit 1
     }
-    exec man "git-workflow-$cmd"
+    wf_man "git-workflow-$cmd"
     ;;
 --help)
-    exec man git-workflow
+    wf_man git-workflow
     ;;
 version | --version | -V)
     printf 'git-workflow %s\n' "$(wf_version)"
@@ -80,7 +90,7 @@ cmd=$(wf_resolve "$1") || {
 shift
 # Like git: --help opens the manual page, -h (where a command has it) the usage
 if [ "${1:-}" = --help ]; then
-    exec man "git-workflow-$cmd"
+    wf_man "git-workflow-$cmd"
 fi
 # Everything but aliases works on a repository; let git say so if there isn't one
 if [ "$cmd" != aliases ]; then

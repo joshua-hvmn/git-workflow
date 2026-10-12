@@ -11,4 +11,4 @@
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 
 detect_protected_branch "commit"
-commit_function "$@"
+commit_changes "$@"

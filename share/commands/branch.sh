@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# git workflow branch: start, prerelease, finish and delete branches; anything else goes to git branch
+# git workflow branch: start, prerelease, finish and delete branches; options go to git branch
 # bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
@@ -17,7 +17,7 @@
 branch_usage() {
     local b
     b=$(wf_cmd branch)
-    cat >&2 <<EOF
+    cat <<EOF
 usage: $b [<subcommand>] [args]
 
   start <topic|release|hotfix> [name]   start a branch (release/hotfix name = vX.Y.Z)
@@ -28,7 +28,7 @@ usage: $b [<subcommand>] [args]
   help                                  this message
   version                               show the git-workflow version
 
-Anything else is passed to 'git branch' (e.g. '$b -a', '$b -vv').
+Options go to 'git branch' (e.g. '$b -a', '$b -vv').
 Manual: git workflow help branch
 EOF
 }
@@ -58,7 +58,15 @@ help | --help | -h)
 version | --version | -V)
     printf 'git-workflow %s\n' "$(wf_version)"
     ;;
-*)
+-*)
+    # Options go to git branch: git b -a, git b -vv, git b -d <branch>
     exec git branch "$subcommand" "$@"
+    ;;
+*)
+    # A bare word is a mistyped subcommand far more often than a branch to
+    # create, and git branch would quietly create it ("git b finsh")
+    err "'$subcommand' is not a $(wf_cmd branch) subcommand. See: $(wf_cmd branch help)"
+    info "To create a branch outside the flow: git branch $subcommand"
+    exit 1
     ;;
 esac

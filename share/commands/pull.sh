@@ -10,4 +10,4 @@
 
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 
-rb_pull_function "$@"
+pull_branch "$@"

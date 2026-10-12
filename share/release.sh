@@ -10,12 +10,12 @@
 # Version / tag helpers and the `git workflow branch prerelease` command.
 
 # Include guard to prevent redundant parsing
-if [ -n "${__RELEASE_UTILS_LOADED:-}" ]; then
+if [ -n "${__WF_RELEASE_LOADED:-}" ]; then
     return 0
 fi
-__RELEASE_UTILS_LOADED=1
+__WF_RELEASE_LOADED=1
 
-if [ -z "${__CORE_UTILS_LOADED:-}" ]; then
+if [ -z "${__WF_CORE_LOADED:-}" ]; then
     . "$GIT_WORKFLOW_DATADIR/core.sh"
 fi
 
@@ -164,7 +164,7 @@ ensure_branch_pushed() {
 prerelease_usage() {
     local b
     b=$(wf_cmd branch)
-    cat >&2 <<EOF
+    cat <<EOF
 usage: $b prerelease [label | full-tag] [-n|--dry-run] [-l|--list]
 
 Tag HEAD of the current release/hotfix branch as a prerelease and push the tag,
@@ -201,13 +201,13 @@ prerelease_branch() {
             ;;
         -*)
             err "unknown option: $1"
-            prerelease_usage
+            prerelease_usage >&2
             return 1
             ;;
         *)
             if [ -n "$arg" ]; then
                 err "too many arguments."
-                prerelease_usage
+                prerelease_usage >&2
                 return 1
             fi
             arg="$1"

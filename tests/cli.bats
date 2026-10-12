@@ -1,6 +1,9 @@
 #!/usr/bin/env bats
 # The git workflow program itself: dispatch, help, and the alias sets.
 
+# "~/..." is the literal text git keeps in include.path, not a path to expand
+# shellcheck disable=SC2088
+
 load test_helper
 
 ALIAS_DIR() { printf '%s' "$XDG_CONFIG_HOME/git-workflow/aliases"; }
@@ -71,14 +74,32 @@ fake_man() {
     [ "$output" = "git-workflow $(cat "$REPO_ROOT/VERSION")" ]
 }
 
+# The page man is asked for: by name when installed, by its path in a checkout
+# (where man wouldn't find it by name)
+man_page() {
+    if [ -n "${GIT_WORKFLOW_BIN:-}" ]; then
+        printf 'man %s' "$1"
+    else
+        printf 'man %s' "$(dirname "$(dirname "$(readlink -f "$REPO_ROOT/bin/git-workflow")")")/share/../man/$1.1"
+    fi
+}
+
 @test "--help and help <command> open the command's man page" {
     fake_man
     run git workflow b --help
-    [ "$output" = "man git-workflow-branch" ]
+    [ "$output" = "$(man_page git-workflow-branch)" ]
     run git workflow help sq
-    [ "$output" = "man git-workflow-squash" ]
+    [ "$output" = "$(man_page git-workflow-squash)" ]
     run git workflow help nope
     [ "$status" -ne 0 ]
+}
+
+@test "help from a checkout opens the checkout's own page" {
+    [ -z "${GIT_WORKFLOW_BIN:-}" ] || skip "an installed copy's pages are where man looks"
+    fake_man
+    run git workflow help branch
+    [[ "$output" == "man "*"/man/git-workflow-branch.1" ]]
+    [ -f "${output#man }" ]
 }
 
 # --- aliases --------------------------------------------------------------------
@@ -295,7 +316,8 @@ fake_man() {
 
 @test "commands outside a repository fail with git's own message" {
     cd "$BATS_TEST_TMPDIR"
-    export GIT_CEILING_DIRECTORIES="$(dirname "$BATS_TEST_TMPDIR")" # in case TMPDIR is in a repo
+    GIT_CEILING_DIRECTORIES=$(dirname "$BATS_TEST_TMPDIR") # in case TMPDIR is in a repo
+    export GIT_CEILING_DIRECTORIES
     run git workflow commit hi
     [ "$status" -eq 128 ]
     [[ "$output" == *"not a git repository"* ]]
@@ -341,4 +363,26 @@ fake_man() {
     [ ! -L "$bin/git-sq" ]
     [ ! -L "$bin/git-workflow" ]
     [ -L "$bin/git-c" ]
+}
+
+# --- output you asked for goes to stdout ----------------------------------------
+
+@test "help, usage and config print to stdout; errors to stderr" {
+    local out
+    out=$(git workflow help 2>/dev/null)
+    [[ "$out" == *"usage: git workflow <command>"* ]]
+    out=$(git b help 2>/dev/null)
+    [[ "$out" == *"usage: git b [<subcommand>]"* ]]
+    out=$(git b config 2>/dev/null)
+    [[ "$out" == *"remote           origin"* ]]
+    out=$(git workflow aliases help 2>/dev/null)
+    [[ "$out" == *"usage: git workflow aliases"* ]]
+    out=$(git b pre -h 2>/dev/null)
+    [[ "$out" == *"usage: git b prerelease"* ]]
+
+    # after an error, the usage goes with it to stderr
+    out=$(git b pre --bogus 2>/dev/null) || :
+    [ -z "$out" ]
+    out=$(git workflow aliases bogus 2>/dev/null) || :
+    [ -z "$out" ]
 }

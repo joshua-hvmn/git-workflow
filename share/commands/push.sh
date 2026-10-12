@@ -11,10 +11,10 @@
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 
 require_branch
-PS_MODE="default"
+push_mode="default"
 case "${1:-}" in
 force | -f | -F | --force | --force-with-lease)
-    PS_MODE="force"
+    push_mode="force"
     shift
     ;;
 -u)
@@ -26,7 +26,7 @@ if [ "$#" -gt 0 ]; then
     exit 1
 fi
 
-case $PS_MODE in
+case $push_mode in
 default)
     detect_protected_branch "push"
     sync_remote
@@ -35,7 +35,7 @@ default)
         info "Syncing would replay the old commits on top. Publish the rewrite with: $(wf_cmd push force)"
         exit 1
     fi
-    conditional_rb_pull
+    pull_current_branch
     git push -u "$REMOTE" "$working_branch"
     ;;
 force)
