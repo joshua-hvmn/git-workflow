@@ -3,7 +3,7 @@
 #
 # Plain Bash, so there is nothing to build. `make install` puts one program,
 # git-workflow, in BINDIR (git runs it as `git workflow`), its libraries,
-# commands and default alias sets in DATADIR, and the man pages and docs next
+# commands, flows, forges and default alias sets in DATADIR, and the man pages and docs next
 # to them. It writes DATADIR into the program. `make help` lists the targets
 # and shows the configuration.
 #
@@ -59,11 +59,13 @@ PROGRAM		:= bin/$(NAME)
 LIBS		:= $(wildcard share/*.sh) VERSION
 COMMANDS	:= $(wildcard share/commands/*.sh)
 ALIASES		:= $(wildcard share/aliases/*)
+FLOWS		:= $(wildcard share/flows/*)
+FORGES		:= $(wildcard share/forges/*.sh)
 MAN1		:= $(wildcard man/*.1)
 DOCS		:= README.md CHANGELOG.md LICENSE
 COMPLETION	:= completion/$(NAME).bash
 SHFMT_FLAGS	:= -i 4
-SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh) $(COMPLETION) tests/test_helper.bash
+SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh share/forges/*.sh) $(COMPLETION) tests/test_helper.bash
 
 # What 1.x installed and 2.0 doesn't: the git-* commands, their libraries
 # (in DATADIR since 1.4.2, in PREFIX/lib/git-workflow before), the alias file
@@ -186,11 +188,13 @@ help:
 install: all ## Install the program, its libraries and commands, the man pages and docs
 	$(Q)$(remove_1x)
 	$(Q)$(MKDIR_P) "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/commands" \
-		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" \
-		"$(DESTDIR)$(COMPLETIONDIR)"
+		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DATADIR)/flows" "$(DESTDIR)$(DATADIR)/forges" \
+		"$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(COMPLETIONDIR)"
 	$(Q)$(call install_files,$(DATADIR),$(INSTALL_DATA),$(LIBS))
 	$(Q)$(call install_files,$(DATADIR)/commands,$(INSTALL_DATA),$(COMMANDS))
 	$(Q)$(call install_files,$(DATADIR)/aliases,$(INSTALL_DATA),$(ALIASES))
+	$(Q)$(call install_files,$(DATADIR)/flows,$(INSTALL_DATA),$(FLOWS))
+	$(Q)$(call install_files,$(DATADIR)/forges,$(INSTALL_DATA),$(FORGES))
 	$(Q)$(call install_files,$(DOCDIR),$(INSTALL_DATA),$(DOCS))
 	$(Q)$(call install_files,$(MANDIR)/man1,$(INSTALL_DATA),$(MAN1))
 	@$(say) INSTALL "$(DESTDIR)$(COMPLETIONDIR)/$(NAME)"
@@ -220,12 +224,15 @@ uninstall: ## Remove what install put in PREFIX, and anything 1.x left there
 	$(Q)$(call remove_files,$(DATADIR),$(notdir $(LIBS)))
 	$(Q)$(call remove_files,$(DATADIR)/commands,$(notdir $(COMMANDS)))
 	$(Q)$(call remove_files,$(DATADIR)/aliases,$(notdir $(ALIASES)))
+	$(Q)$(call remove_files,$(DATADIR)/flows,$(notdir $(FLOWS)))
+	$(Q)$(call remove_files,$(DATADIR)/forges,$(notdir $(FORGES)))
 	$(Q)$(call remove_files,$(DOCDIR),$(DOCS))
 	$(Q)$(call remove_files,$(MANDIR)/man1,$(notdir $(MAN1)))
 	$(Q)$(call remove_files,$(COMPLETIONDIR),$(NAME))
 	$(Q)$(remove_1x)
 # Only this project's own directories, and only once they're empty
 	$(Q)$(call remove_dir,$(DATADIR)/commands); $(call remove_dir,$(DATADIR)/aliases); \
+		$(call remove_dir,$(DATADIR)/flows); $(call remove_dir,$(DATADIR)/forges); \
 		$(call remove_dir,$(DATADIR)); $(call remove_dir,$(DOCDIR))
 # Your alias sets are your config, so they stay; say how to drop them
 	$(Q)[ -n "$(DESTDIR)" ] || \
@@ -256,8 +263,8 @@ unlink: ## Remove that symlink (only if it points into this checkout)
 	$(Q)$(unlink_1x)
 
 lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the man pages
-	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh $(COMPLETION)"
-	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh $(COMPLETION)
+	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)"
+	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)
 	@$(say) LINT "tests/*"
 	$(Q)$(SHELLCHECK) -s bash tests/test_helper.bash
 	$(Q)$(SHELLCHECK) tests/*.bats

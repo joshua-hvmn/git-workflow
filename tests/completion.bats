@@ -76,6 +76,23 @@ require_git_completion() {
     [ "$output" = "feat/one" ]
 }
 
+@test "completion: start offers the flow's branch types" {
+    require_git_completion
+    run complete "git b start "
+    [ "$output" = $'topic\nrelease\nhotfix' ]
+    printf '[workflow "feature"]\n    prefix = feature/\n    into = dev\n' >.gitworkflow
+    run complete "git b start f"
+    [ "$output" = "feature" ]
+}
+
+@test "completion: pull and sync offer branches that are only on the remote" {
+    require_git_completion
+    (cd "$SEED" && git push -q origin main:only-remote)
+    git fetch -q origin
+    run complete "git workflow pull only"
+    [ "$output" = "only-remote" ]
+}
+
 @test "completion: through an alias, which already names the command" {
     require_git_completion
     run complete "git b fi"

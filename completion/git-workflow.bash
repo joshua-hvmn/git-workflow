@@ -58,14 +58,15 @@ _git_workflow() {
         if [ "$n" -eq 1 ]; then
             case "$cur" in
             -*) _git_branch ;; # options go to git branch
-            *) __gitcomp "start pre prerelease finish delete config help version" ;;
+            *) __gitcomp "start pre prerelease release finish delete config help version" ;;
             esac
             return
         fi
         case "$sub" in
         start)
             if [ "$n" -eq 2 ]; then
-                __gitcomp "topic release hotfix"
+                # The branch types of this repository's flow
+                __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
             fi
             ;;
         finish)
@@ -82,6 +83,11 @@ _git_workflow() {
         pre | prerelease)
             case "$cur" in
             -*) __gitcomp "--dry-run --list" ;;
+            esac
+            ;;
+        release)
+            case "$cur" in
+            -*) __gitcomp "--dry-run" ;;
             esac
             ;;
         esac
@@ -107,7 +113,10 @@ _git_workflow() {
         ;;
     pull | sync)
         if [ "$n" -eq 1 ]; then
-            __gitcomp_direct "$(__git_heads "" "$cur" " ")"
+            # Local branches, and remote ones `git switch` would create
+            # (--mode is newer than some git completions; they return 1)
+            __git_complete_refs --dwim --mode=heads ||
+                __gitcomp_direct "$(__git_heads "" "$cur" " ")"
         fi
         ;;
     squash)

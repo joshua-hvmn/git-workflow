@@ -1,0 +1,23 @@
+# git-workflow flow: GitHub flow
+#
+# Everything starts from main and goes back into it through pull requests.
+# A release is a tag: `git workflow branch pre` tags main as vX.Y.Z-rc.N, and
+# `git workflow branch release` tags the commit that prerelease tested.
+#
+# A flow is plain data in git-config format, read with the same keys as
+# `git config workflow.*`; see "Flows" in git-workflow(1).
+[workflow]
+    description = GitHub flow: main only, releases are tags
+    releaseFromMain = true
+
+[workflow "topic"]
+    from = main
+    into = main
+
+# hotfix/vX.Y.Z: a fix to the latest release. main already has unreleased
+# work, so it starts from the release's tag; the tag goes on its tested tip.
+[workflow "hotfix"]
+    prefix = hotfix/
+    from = latest-release
+    into = main
+    tag = tip

@@ -36,13 +36,13 @@ default)
         exit 1
     fi
     pull_current_branch
-    git push -u "$REMOTE" "$working_branch"
+    git push -u "$(remote_for "$working_branch")" "$working_branch"
     ;;
 force)
     if is_protected_branch "$working_branch"; then # need a way to force it anywhere
         err "refusing to force-push protected branch '$working_branch'."
         exit 1
     fi
-    git push --force-with-lease --force-if-includes -u "$REMOTE" "$working_branch"
+    git push --force-with-lease --force-if-includes -u "$(remote_for "$working_branch")" "$working_branch"
     ;;
 esac

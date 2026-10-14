@@ -1,0 +1,34 @@
+# git-workflow flow: git flow
+#
+# main holds releases, next (or develop) collects finished work, and
+# release/hotfix branches carry a version to main, tagged on the way.
+#
+# A flow is plain data in git-config format, read with the same keys as
+# `git config workflow.*`; see "Flows" in git-workflow(1). Copy this file to
+# ~/.config/git-workflow/flows/<name> to make your own, or override single
+# keys in a repository's .gitworkflow file or with git config.
+[workflow]
+    description = git flow: main + next, release and hotfix branches
+    devBranch = next
+
+# Finished work goes into the dev branch
+[workflow "topic"]
+    from = dev
+    into = dev
+
+# release/vX.Y.Z: one at a time, tagged on main, merged back into dev
+[workflow "release"]
+    prefix = release/
+    from = dev
+    into = main
+    tag = merge
+    backMerge = dev
+    single = true
+
+# hotfix/vX.Y.Z: a fix to the latest release, from main
+[workflow "hotfix"]
+    prefix = hotfix/
+    from = main
+    into = main
+    tag = merge
+    backMerge = dev
