@@ -59,7 +59,7 @@ repo_file() {
     run git b config
     [[ "$output" == *"flow             github  (.gitworkflow)"* ]]
     [[ "$output" == *"hotfix    fix/ "* ]]
-    [[ "$output" == *"repository file  $PWD/.gitworkflow"* ]]
+    [[ "$output" == *"repository file  $(git rev-parse --show-toplevel)/.gitworkflow"* ]]
 }
 
 @test "repo file: it beats your global config, and your repo config beats it" {
