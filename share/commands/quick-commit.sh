@@ -19,10 +19,14 @@ p | -p | --push)
 esac
 
 [ "$push_after" = "p" ] && require_branch
+# Refuse before committing, not after: the branch only takes pull requests
+if [ "$push_after" = "p" ] && pr_only_branch "$working_branch"; then
+    detect_protected_branch "push"
+fi
 detect_protected_branch "commit"
 commit_changes "$@"
 pull_current_branch
 
 if [ "$push_after" = "p" ]; then
-    git push -u "$REMOTE" "$working_branch"
+    git push -u "$(remote_for "$working_branch")" "$working_branch"
 fi

@@ -289,7 +289,8 @@ man_page() {
 @test "branch start with no mode prints its usage" {
     run git workflow branch start
     [ "$status" -ne 0 ]
-    [[ "$output" == *"usage: git b start <topic|hotfix|release>"* ]]
+    [[ "$output" == *"usage: git b start <type> [name]"* ]]
+    [[ "$output" == *"Types in the gitflow flow: topic, release and hotfix."* ]]
     [[ "$output" != *"command not found"* ]]
 }
 
@@ -327,6 +328,10 @@ man_page() {
     [[ "$output" == *"not a git repository"* ]]
     run git workflow version
     [ "$status" -eq 0 ]
+    [[ "$output" != *"fatal"* ]] # working out the flow stays quiet outside a repository
+    run git workflow aliases list
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"fatal"* ]]
 }
 
 @test "aliases install: an alias in a file you include keeps working" {
