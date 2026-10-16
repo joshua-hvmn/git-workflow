@@ -176,14 +176,16 @@ no_merge_in_progress() {
 # Put a fake `gh` first on PATH and use pull requests. `gh pr list` prints
 # what its --jq would: $1, the "<STATE> <url>" of the newest pull request
 # (gh_view changes it later), or with mergeCommit in the query, gh_merge's
-# commit. Every other call is logged to $GH_LOG.
+# commit, or with headRefOid, gh_head's. Every other call is logged to $GH_LOG.
 fake_gh() {
     local bin="$BATS_TEST_TMPDIR/bin"
     GH_LOG="$BATS_TEST_TMPDIR/gh.log"
     GH_VIEW="$BATS_TEST_TMPDIR/gh.view"
     GH_MERGE="$BATS_TEST_TMPDIR/gh.merge"
+    GH_HEAD="$BATS_TEST_TMPDIR/gh.head"
     : >"$GH_LOG"
     : >"$GH_MERGE"
+    : >"$GH_HEAD"
     gh_view "${1:-}"
     mkdir -p "$bin"
     # shellcheck disable=SC2016 # the generated script expands these
@@ -192,6 +194,7 @@ fake_gh() {
         echo 'if [ "$1 $2" = "pr list" ]; then'
         echo '    case "$*" in'
         echo "    *mergeCommit*) cat '$GH_MERGE' ;;"
+        echo "    *headRefOid*) cat '$GH_HEAD' ;;"
         echo "    *) cat '$GH_VIEW' ;;"
         echo '    esac'
         echo '    exit 0'
@@ -199,8 +202,22 @@ fake_gh() {
         echo "echo \"\$*\" >>'$GH_LOG'"
     } >"$bin/gh"
     chmod +x "$bin/gh"
-    export PATH="$bin:$PATH" GH_LOG GH_VIEW GH_MERGE
+    export PATH="$bin:$PATH" GH_LOG GH_VIEW GH_MERGE GH_HEAD
     use_prs
+}
+
+# A gh that can't be asked anything (not logged in, say)
+broken_gh() {
+    local bin="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin"
+    printf '#!/bin/sh\necho "To get started with GitHub CLI, please run:  gh auth login" >&2\nexit 4\n' >"$bin/gh"
+    chmod +x "$bin/gh"
+    export PATH="$bin:$PATH"
+    use_prs
+}
+
+gh_head() {
+    printf '%s' "$1" >"$GH_HEAD"
 }
 
 # Back to the default: finish opens pull requests

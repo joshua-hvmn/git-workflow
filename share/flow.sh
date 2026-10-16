@@ -20,6 +20,8 @@ if [ -z "${__WF_RELEASE_LOADED:-}" ]; then
     . "$GIT_WORKFLOW_DATADIR/release.sh"
 fi
 
+WF_MERGED_HEAD=''
+
 # FUNCTIONS
 
 require_clean_tree() {
@@ -279,7 +281,7 @@ finish_merge() {
         type_get "$type"
         tag_target=HEAD
         [ "$T_TAG" = tip ] && tag_target="$branch"
-        if ! git tag -a "$version" -m "$type: $version" "$tag_target"; then
+        if ! not_released "$tag_target" || ! git tag -a "$version" -m "$type: $version" "$tag_target"; then
             finish_rollback "$branch" "" "$into" "$into_before" || return 1
             return 1
         fi
@@ -398,7 +400,7 @@ finish_cleanup() {
 }
 
 finish_pr() {
-    local branch="$1" type="$2" version="" into into_ref back="" how="" state="" url="" target title body url_actions remote
+    local branch="$1" type="$2" version="" into into_ref back="" how="" state="" url="" target title body url_actions remote head
     type_get "$type"
     into=$(resolve_point "$T_INTO")
     into_ref=$(remote_ref "$into")
@@ -415,16 +417,39 @@ finish_pr() {
     # Merged already? A merge commit keeps the branch's commits; a squash or
     # rebase only their changes
     if remote_branch_exists "$into" && git merge-base --is-ancestor "$branch" "$into_ref"; then
+        # ...unless the branch has no commits of its own: then its tip is a
+        # commit on $into's own line (it was just started), not a merged one
+        if [ "$(merge_point "$branch" "$into_ref")" = "$(git rev-parse "$branch")" ]; then
+            err "'$branch' has no commits that '$into_ref' doesn't already have; there's nothing to finish."
+            return 1
+        fi
         how=commit
     elif remote_branch_exists "$into" && content_merged "$branch" "$into_ref"; then
         how=changes
     fi
     if [ -z "$how" ]; then
         forge_load || return 1
-        state=$(forge_pr_find "$branch" "$remote")
+        state=$(forge_pr_find "$branch" "$remote") || {
+            err "couldn't look up the pull requests for '$branch' with $(forge_name) (see above)."
+            return 1
+        }
         url="${state#* }"
         case "$state" in
-        MERGED\ *) how=changes ;;
+        MERGED\ *)
+            # gh knows it merged, but git can't tell (squashed after nearby
+            # lines changed). Unless this branch has commits that pull request
+            # never had: a branch name used again after its pull request merged.
+            head=$(forge_pr_head "$branch" "$remote") || head=""
+            if [ -z "$head" ] || ! git cat-file -e "$head^{commit}" 2>/dev/null; then
+                how=changes
+            elif git merge-base --is-ancestor "$branch" "$head"; then
+                how=changes
+                WF_MERGED_HEAD="$head" # delete_branch counts everything up to it as merged
+            else
+                note "The last pull request from '$branch' merged without its newest commits: $url"
+                state="" url=""
+            fi
+            ;;
         esac
     fi
 
@@ -452,13 +477,14 @@ finish_pr() {
             target=$(merge_point "$branch" "$into_ref") || return 1
         else
             forge_load || return 1
-            target=$(forge_pr_merge_commit "$branch" "$remote")
+            target=$(forge_pr_merge_commit "$branch" "$remote") || target=""
             if [ -z "$target" ] || ! git merge-base --is-ancestor "$target" "$into_ref" 2>/dev/null; then
                 err "'$branch' was squash- or rebase-merged, and $(forge_name) didn't give a merge commit on '$into_ref' to tag."
                 return 1
             fi
         fi
 
+        not_released "$target" || return 1
         yes_no "'$branch' is merged into '$into_ref'. Tag $(git rev-parse --short "$target") $version and push the tag?" || {
             info "Aborted."
             return 1
@@ -472,7 +498,7 @@ finish_pr() {
         if [ -n "$back" ] && remote_branch_exists "$back" &&
             ! git merge-base --is-ancestor "$target" "$(remote_ref "$back")"; then
             forge_load || return 1
-            state=$(forge_pr_find "$into" "$UPSTREAM")
+            state=$(forge_pr_find "$into" "$UPSTREAM") || state=""
             case "$state" in
             OPEN\ *) note "Bring $version into $back with the open pull request from $into: ${state#* }" ;;
             *)
@@ -563,6 +589,10 @@ finish_branch() {
 unmerged_commits() {
     local ref="$1" branch="$2" keep="" r b left
 
+    # Everything in a pull request the forge says merged (finish_pr sets it)
+    if [ -n "$WF_MERGED_HEAD" ] && git merge-base --is-ancestor "$ref" "$WF_MERGED_HEAD" 2>/dev/null; then
+        return 0
+    fi
     for b in "$MAIN_BRANCH" "$DEV_BRANCH"; do
         for r in "refs/heads/$b" "refs/remotes/$(remote_ref "$b")"; do
             git rev-parse --verify --quiet "$r" >/dev/null && keep="$keep $r"

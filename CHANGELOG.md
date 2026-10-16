@@ -36,7 +36,7 @@
   branch and the tags come from, and where pull requests go, from `<you>:<branch>`. Your
   branches go to `workflow.remote`, your fork.
 - Forges: pull requests go through `share/forges/<workflow.forge>.sh`; `github` (with `gh`)
-  ships. Another host is another file with the same five functions.
+  ships. Another host is another file with the same six functions.
 - `git b delete` counts a branch whose pull request was squash- or rebase-merged as merged.
 - `git b finish` flags a release branch with commits after its last prerelease.
 - `git b pre vX.Y.Z` names the version on any branch.

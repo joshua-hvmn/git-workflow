@@ -60,6 +60,18 @@ tag_exists() {
     git show-ref --verify --quiet "refs/tags/$1"
 }
 
+# not_released <rev>: fail, saying so, when <rev> already carries a vX.Y.Z tag
+# (a versioned branch with no commits of its own would tag the last release again)
+not_released() {
+    local t
+    for t in $(git tag --points-at "$1"); do
+        if is_stable_version "$t"; then
+            err "$(git rev-parse --short "$1") is already released as $t; there's nothing new to tag."
+            return 1
+        fi
+    done
+}
+
 # release/v1.2.3 -> v1.2.3: the name after the prefix, for a branch of a
 # versioned type (one that finishes with a tag); empty for any other branch
 branch_version() {
@@ -80,8 +92,10 @@ versioned_prefixes() {
     printf '%s' "${out:-(none in this flow)}"
 }
 
+# Oldest first, by when they were cut (the last key sorts first), so the last
+# one is what was tested last whatever its label: rc.2, then beta.1
 prerelease_tags_for() {
-    git tag --list "$1-*" --sort=v:refname
+    git tag --list "$1-*" --sort=v:refname --sort=creatordate
 }
 
 # next_prerelease_tag v1.2.3 rc -> v1.2.3-rc.<highest existing + 1>
@@ -152,9 +166,9 @@ check_version_file() {
 actions_url() {
     local slug
     slug=$(remote_slug "$UPSTREAM")
-    if [ -n "$slug" ]; then
-        printf 'https://github.com/%s/actions' "$slug"
-    fi
+    case "$slug" in
+    github.com/*) printf 'https://%s/actions' "$slug" ;;
+    esac
 }
 
 # Push local commits so the tagged commit also lives on the remote branch.

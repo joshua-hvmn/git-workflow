@@ -8,16 +8,18 @@
 #   forge_require                     fail, saying what to install, if it can't work here
 #   forge_pr_find <branch> <remote>   "<OPEN|MERGED|CLOSED> <url>" of the newest pull
 #                                     request from <branch> (pushed to <remote>) into
-#                                     UPSTREAM; nothing if there's none
+#                                     UPSTREAM; nothing if there's none; fails if
+#                                     the forge can't be asked
 #   forge_pr_merge_commit <branch> <remote>
 #                                     the commit that merged it (merge, squash or rebase)
+#   forge_pr_head <branch> <remote>   the head commit it was merged at
 #   forge_pr_create <base> <branch> <remote> <title> <body>
 #                                     open one into <base>; an empty title fills the
 #                                     title and body from the commits
 #
 # Pull requests always go to UPSTREAM's repository. A branch on another remote
 # (your fork) is <fork owner>:<branch> there. Another forge (GitLab's glab, say)
-# is another file with these five functions.
+# is another file with these six functions.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -37,12 +39,14 @@ forge_require() {
 # as ${GH_REPO:+--repo "$GH_REPO"} (an empty array would trip set -u in Bash 3.2)
 __gh_repo() {
     GH_REPO=$(remote_slug "$UPSTREAM")
+    GH_REPO="${GH_REPO#github.com/}"
 }
 
 # The owner of the repository <remote> points at, if it's a plain GitHub name
 __gh_owner() {
     local slug owner
     slug=$(remote_slug "$1")
+    slug="${slug#*/}"
     owner="${slug%%/*}"
     case "$owner" in
     '' | *[!A-Za-z0-9-]*) return 0 ;;
@@ -65,14 +69,21 @@ forge_pr_find() {
     __gh_repo
     gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state all --limit 30 \
         --json state,url,headRepositoryOwner \
-        --jq "$(__gh_pick "$2") | if . == null then empty else .state + \" \" + .url end" 2>/dev/null || true
+        --jq "$(__gh_pick "$2") | if . == null then empty else .state + \" \" + .url end"
 }
 
 forge_pr_merge_commit() {
     __gh_repo
     gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state merged --limit 30 \
         --json mergeCommit,headRepositoryOwner \
-        --jq "$(__gh_pick "$2") | if . == null then empty else .mergeCommit.oid end" 2>/dev/null || true
+        --jq "$(__gh_pick "$2") | if . == null then empty else .mergeCommit.oid end"
+}
+
+forge_pr_head() {
+    __gh_repo
+    gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state merged --limit 30 \
+        --json headRefOid,headRepositoryOwner \
+        --jq "$(__gh_pick "$2") | if . == null then empty else .headRefOid end"
 }
 
 forge_pr_create() {

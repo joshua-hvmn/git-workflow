@@ -580,7 +580,12 @@ __wf_load_types() {
         __wf_type_key "$type" into none "main dev none"
         into="$TV"
         if ! conf_get "$type.into"; then
-            __wf_problem "branch type '$type' has no workflow.$type.into, so it isn't one; ignored."
+            # Your global config covers every repository, including ones whose
+            # flow has no such type (2.x's releasePrefix in GitHub flow): quietly
+            case "$line" in
+            *"	global git config") ;;
+            *) __wf_problem "branch type '$type' has no workflow.$type.into, so it isn't one; ignored." ;;
+            esac
             continue
         fi
         [ "$into" = none ] && continue
@@ -808,17 +813,22 @@ remote_ref() {
     printf '%s/%s' "$(remote_for "$1")" "$1"
 }
 
-# owner/repo of a GitHub-style remote, from its configured URL; empty otherwise
+# host/owner/repo of a GitHub-style remote, from its configured URL
+# (github.com/joshua-hvmn/git-workflow); empty otherwise
 remote_slug() {
-    local url
+    local url host
     url=$(git config --get "remote.$1.url") || return 0
     url="${url%/}"
     url="${url%.git}"
     case "$url" in
-    git@*:*) printf '%s' "${url#git@*:}" ;;
-    ssh://git@*/*) url="${url#ssh://git@}" && printf '%s' "${url#*/}" ;;
-    https://*/*/*) url="${url#https://}" && printf '%s' "${url#*/}" ;;
+    git@*:*) url="${url#git@}" && host="${url%%:*}" && url="${url#*:}" ;;
+    ssh://git@*/*) url="${url#ssh://git@}" && host="${url%%/*}" && url="${url#*/}" ;;
+    https://*/*/*) url="${url#https://}" && host="${url%%/*}" && url="${url#*/}" ;;
+    *) return 0 ;;
     esac
+    host="${host#*@}" # https://user@host
+    host="${host%:*}" # ssh://git@host:22
+    printf '%s/%s' "$host" "$url"
 }
 
 # detect protected branch

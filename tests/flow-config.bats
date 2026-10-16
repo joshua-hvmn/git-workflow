@@ -54,6 +54,19 @@ repo_file() {
     [[ "$output" == *"release   rel/ "* ]]
 }
 
+@test "flow: a global 2.x releasePrefix is quiet in a flow without release branches" {
+    git config --global workflow.releasePrefix rel/
+    drop_next
+    run git b config
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Warning"* ]]
+
+    git config --unset-all --global workflow.releasePrefix
+    repo_file '[workflow "docs"]' 'prefix = docs/'
+    run git b config
+    [[ "$output" == *"branch type 'docs' has no workflow.docs.into"* ]]
+}
+
 @test "repo file: .gitworkflow picks the flow and adjusts it" {
     repo_file '[workflow]' 'flow = github' '[workflow "hotfix"]' 'prefix = fix/'
     run git b config

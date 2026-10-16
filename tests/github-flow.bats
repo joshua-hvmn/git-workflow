@@ -101,11 +101,69 @@ version_on_main() {
     (cd "$SEED" && git fetch -q && git switch -q -C main origin/main && git merge -q --squash origin/foo &&
         echo more >>a && git commit -qam "foo, edited (#1)" && AS_GITHUB=1 git push -q origin main)
     gh_view "MERGED https://github.com/o/r/pull/1"
+    gh_head "$(git rev-parse foo)"
 
     run git b finish <<<"y"
     [ "$status" -eq 0 ]
     [[ "$output" == *"merged into 'origin/main': https://github.com/o/r/pull/1"* ]]
     [ ! -s "$GH_LOG" ]
+    no_local_branch foo
+}
+
+@test "github flow: a branch name used again after its pull request merged opens a new one" {
+    github_flow
+    fake_gh
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "old work"
+    old=$(git rev-parse HEAD)
+    commit_change a "new work"
+    gh_view "MERGED https://github.com/o/r/pull/1"
+    gh_head "$old"
+
+    run git b finish <<<"y"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"merged without its newest commits"* ]]
+    [ "$(cat "$GH_LOG")" = "pr create --base main --head foo --fill" ]
+}
+
+@test "finish: when gh can't be asked, it stops instead of pushing the branch" {
+    github_flow
+    broken_gh
+    git b start topic foo >/dev/null 2>&1
+    commit_change a "work"
+    git push -q -u origin foo
+    # squash-merged with an extra change, so only gh could tell, then deleted
+    (cd "$SEED" && git fetch -q && git switch -q -C main origin/main && git merge -q --squash origin/foo &&
+        echo more >>a && git commit -qam "foo, edited (#1)" && AS_GITHUB=1 git push -q origin main &&
+        git push -q origin --delete foo)
+    git fetch -q --prune
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"couldn't look up the pull requests for 'foo'"* ]]
+    remote_lacks_ref refs/heads/foo
+}
+
+@test "finish: a branch with no commits of its own isn't merged" {
+    github_flow
+    fake_gh
+    git b start topic foo >/dev/null 2>&1
+
+    run git b finish <<<"y"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"there's nothing to finish"* ]]
+    [ "$(git branch --show-current)" = "foo" ]
+}
+
+@test "github flow: a hotfix with no commits doesn't tag the last release again" {
+    drop_next
+    git b start hotfix v1.0.1 >/dev/null 2>&1
+
+    run git b finish <<<$'y\ny'
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already released as v1.0.0"* ]]
+    remote_lacks_ref refs/tags/v1.0.1
+    no_local_tag v1.0.1
 }
 
 @test "delete: a squash-merged branch is merged, no -f needed" {
@@ -251,6 +309,22 @@ version_on_main() {
     remote_has_ref refs/tags/v1.1.0
 }
 
+@test "github flow: release promotes the prerelease cut last, whatever its label" {
+    github_flow
+    use_prs
+    version_on_main v1.1.0
+    GIT_COMMITTER_DATE="2026-01-01T00:00:00Z" git b pre <<<"y" >/dev/null 2>&1 # v1.1.0-rc.1
+    remote_commit main b
+    git sync >/dev/null 2>&1
+    GIT_COMMITTER_DATE="2026-01-02T00:00:00Z" git b pre beta <<<"y" >/dev/null 2>&1
+    tested=$(git rev-parse HEAD)
+
+    run git b release <<<"y"
+    [ "$status" -eq 0 ]
+    git fetch -q origin
+    [ "$(git rev-parse 'v1.1.0^{commit}')" = "$tested" ]
+}
+
 @test "github flow: release -n changes nothing" {
     github_flow
     git b pre v1.1.0 <<<"y" >/dev/null 2>&1
@@ -317,4 +391,16 @@ version_on_main() {
     [ "$status" -eq 0 ]
     [ "$(git rev-parse main)" = "$(git rev-parse upstream/main)" ]
     tag_exists_locally v1.0.1
+}
+
+@test "fork: sync ignores the fork's own copy of a tag" {
+    drop_next
+    use_fork
+    remote_commit main b
+    git -C "$FORK_DIR" tag -a v1.1.0-rc.1 -m "a test in the fork" main
+    (cd "$SEED" && git tag -a v1.1.0-rc.1 -m upstream origin/main && git push -q origin v1.1.0-rc.1)
+
+    run git sync
+    [ "$status" -eq 0 ]
+    [ "$(git rev-parse 'v1.1.0-rc.1^{commit}')" = "$(git rev-parse upstream/main)" ]
 }

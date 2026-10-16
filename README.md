@@ -261,7 +261,7 @@ releases through release branches tagged on their tested tip:
 
 A flow that needs something these settings can't express (cherry-picking fixes onto release
 branches, say) is a new value for one of them, in `share/flow.sh`. Pull requests go through a
-forge, `share/forges/github.sh`: another host is another file with the same five functions.
+forge, `share/forges/github.sh`: another host is another file with the same six functions.
 
 ### Guardrails
 
