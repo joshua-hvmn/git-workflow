@@ -3,3 +3,4 @@
 .github/ export-ignore
 .gitattributes export-ignore
 packaging/ export-ignore
+.gitworkflow export-ignore

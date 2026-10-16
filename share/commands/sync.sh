@@ -12,6 +12,12 @@
 
 # MAIN
 info "Fetching all remotes and pruning dead branches..."
-git fetch --all --prune --tags
+if [ "$REMOTE" = "$UPSTREAM" ]; then
+    git fetch --all --prune --tags
+else
+    # Tags come from UPSTREAM, as in sync_remote: a fork's copies may differ
+    git fetch --all --prune --no-tags
+    git fetch --prune --tags "$UPSTREAM"
+fi
 __SYNCED=1 # already fetched, stops pull_branch from fetching again
 pull_branch "$@"

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# git workflow branch: start, prerelease, finish and delete branches; options go to git branch
+# git workflow branch: start, prerelease, release, finish and delete branches; options go to git branch
 # bin/git-workflow sources this file with the command's arguments in "$@".
 
 # SPDX-License-Identifier: MIT
@@ -20,11 +20,12 @@ branch_usage() {
     cat <<EOF
 usage: $b [<subcommand>] [args]
 
-  start <topic|release|hotfix> [name]   start a branch (release/hotfix name = vX.Y.Z)
-  prerelease|pre [label|tag] [-n] [-l]  tag the release branch as vX.Y.Z-<label>.N and push
-  finish [branch]                       merge per the flow, tag releases/hotfixes, push
+  start <type> [name]                   start a branch ($WF_FLOW flow: $(types_list))
+  prerelease|pre [label|tag] [-n] [-l]  tag a versioned branch as vX.Y.Z-<label>.N and push
+  release [vX.Y.Z] [-n]                 tag the newest prerelease's commit vX.Y.Z (flows that release from main)
+  finish [branch]                       integrate per the flow (merge, or pull request), tag, push
   delete [branch] [-y] [-f]             delete a branch locally and on the remote (-f: even if unmerged)
-  config                                show the effective workflow settings
+  config                                show the flow and effective settings
   help                                  this message
   version                               show the git-workflow version
 
@@ -49,8 +50,11 @@ delete)
 prerelease | pre)
     prerelease_branch "$@"
     ;;
+release)
+    release_main "$@"
+    ;;
 config)
-    show_config
+    show_config "$@"
     ;;
 help | --help | -h)
     branch_usage

@@ -1,18 +1,22 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-10-11 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-10-12 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow-branch \- start, prerelease, finish and delete branches following the flow
+git-workflow-branch \- start, prerelease, release, finish and delete branches following the flow
 .SH SYNOPSIS
 .B git workflow branch
 .RI [ git-branch-options ]
 .br
 .B git workflow branch start
-.BR topic | release | hotfix
+.I type
 .RI [ name ]
 .br
 .B git workflow branch pre
-.RI [ label | tag ]
+.RI [ label | vX.Y.Z | tag ]
 .RB [ \-n ]
 .RB [ \-l ]
+.br
+.B git workflow branch release
+.RI [ vX.Y.Z ]
+.RB [ \-n ]
 .br
 .B git workflow branch finish
 .RI [ branch ]
@@ -23,6 +27,7 @@ git-workflow-branch \- start, prerelease, finish and delete branches following t
 .RB [ \-f ]
 .br
 .B git workflow branch config
+.RB [ \-\-types ]
 |
 .B help
 |
@@ -56,45 +61,106 @@ works after
 too.
 .SH COMMANDS
 .TP
-.B start topic | release | hotfix \fR[\fIname\fR]
-Create a branch from the right base and push it.
-Topic branches start from the dev branch;
+.B start \fItype\fR [\fIname\fR]
+Create a branch of one of the flow's types from where the type says, and
+push it.
+.B config
+lists the types. In
+.BR gitflow ,
+topic branches start from the dev branch;
 .I release/vX.Y.Z
 from the dev branch;
 .I hotfix/vX.Y.Z
-from the main branch.
-Release and hotfix versions are checked against existing tags.
+from the main branch. In
+.BR github ,
+topic branches start from the main branch and
+.I hotfix/vX.Y.Z
+from the latest release tag, since the main branch already has unreleased
+work. Versions are checked against existing tags. The 2.x spellings
+.RB ( t ,
+.BR \-\-topic ,
+\&...) still work.
 Tracked edits come along, as with
 .BR "git switch \-c" .
 A name that already exists locally or on the remote is refused.
 .TP
-.B pre \fR[\fIlabel\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR]
-Tag the current release or hotfix branch as a prerelease and push the tag.
+.B pre \fR[\fIlabel\fR | \fIvX.Y.Z\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR]
+Tag the current release or hotfix branch (any versioned type) as a
+prerelease and push the tag.
 With no argument the tag is
 .IR vX.Y.Z\-rc.N ,
 numbered after the existing ones; a
 .I label
 replaces
 .BR rc ;
-a full
+.I vX.Y.Z
+names the version; a full
 .I tag
 is used as given.
 Unpushed branch commits are pushed first (after asking); a branch that is
 behind its remote is refused.
+In flows that release from the main branch
+.RB ( workflow.releaseFromMain ,
+set by
+.BR github ),
+it also works there: it fast-forwards the main branch first, takes the
+version from
+.I vX.Y.Z
+or the
+.B workflow.versionFile
+file, and refuses local commits the remote main branch doesn't have, since
+only the tag is pushed.
 .B \-n
 shows what would be tagged and never prompts or stops.
 .B \-l
 lists the prereleases for the branch's version.
 .TP
+.B release \fR[\fIvX.Y.Z\fR] [\fB\-n\fR]
+In flows that release from the main branch: tag the commit the newest
+prerelease of
+.I vX.Y.Z
+tested as
+.I vX.Y.Z
+and push only the tag, so it works when the main branch only accepts pull
+requests. With no version, the newest prerelease that hasn't been
+released yet is promoted. The commit must be on the remote main branch;
+commits the main branch gained after it are reported and go in the next
+release. With no prerelease the release is untested: it warns, and
+.B workflow.strict
+refuses.
+.B \-n
+shows what would be tagged.
+.TP
 .B finish \fR[\fIbranch\fR]
-A topic branch is merged into the dev branch with
+Integrate a branch where its type says
+.RB ( config
+shows where).
+.IP
+With pull requests
+.RB ( workflow.integrate=pr ,
+the default), the branch is pushed and a pull request opened (or the open
+one shown). Run
+.B finish
+again once it's merged: a topic branch is deleted, however it was merged,
+and the dev branch brought up to date. A release or hotfix branch is
+tagged
+.I vX.Y.Z
+and only the tag pushed; in
+.BR gitflow ,
+a pull request from the main branch into the dev branch follows. Tagging
+the merge works however the pull request was merged; tagging the tested
+tip (GitHub flow's hotfixes) needs a merge commit, and a squashed one is
+refused.
+.IP
+Merging locally
+.RB ( workflow.integrate=merge ),
+a topic branch is merged into the dev branch with
 .BR \-\-no\-ff ,
-pushed, and deleted (or, with
-.BR "workflow.finishTopic=pr" ,
-pushed and opened as a pull request).
-A release or hotfix branch is merged into the main branch, tagged
-.IR vX.Y.Z ,
-merged back into the dev branch (git flow only), and pushed with
+pushed, and deleted. A release or hotfix branch is merged into the main
+branch, tagged
+.I vX.Y.Z
+(on the merge, or on the tested tip), merged back into the dev branch
+(git flow), and pushed with
 .B git push \-\-atomic
 together with that one tag.
 Nothing is pushed until every local step has succeeded. If a merge
@@ -103,6 +169,8 @@ restores the main and dev branches, deletes the tag it made, and returns
 to the branch being finished, so it can simply be run again. For a
 rejected release push or a back-merge conflict it asks first, and
 otherwise prints the command that completes the release by hand.
+.IP
+Either way, commits after the last prerelease are flagged.
 .TP
 .B delete \fR[\fIbranch\fR] [\fB\-y\fR] [\fB\-f\fR]
 Delete a branch locally and on the remote.
@@ -111,10 +179,14 @@ skips the question, and only applies when the branch is named.
 A branch with commits that aren't merged into the main or dev branch
 (locally or on the remote copy) is refused unless
 .B \-f
-is given. Protected branches are never deleted.
+is given; one whose pull request was squash- or rebase-merged counts as
+merged. Protected branches are never deleted.
 .TP
-.B config
-Show the effective settings.
+.B config \fR[\fB\-\-types\fR]
+Show the flow, why it's the flow, every setting with where it came from,
+and the branch types.
+.B \-\-types
+prints only the type names.
 .TP
 .B version
 Show the installed version.
@@ -123,7 +195,15 @@ Show the installed version.
 git workflow branch start release v1.2.0
 git workflow branch pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
 git workflow branch pre              # v1.2.0\-rc.2
-git workflow branch finish           # v1.2.0 on main, merged back into next
+git workflow branch finish           # pull request into main; once it's merged,
+git workflow branch finish           # v1.2.0 tagged, back-merge pull request into next
+
+# GitHub flow
+git workflow branch start topic fix
+git workflow branch finish           # pushes it, opens a pull request
+git workflow branch finish           # after the merge: deletes the branch
+git workflow branch pre              # on main: v1.3.0\-rc.1 (from VERSION)
+git workflow branch release          # tags rc.1's commit v1.3.0
 .fi
 .SH SEE ALSO
 .BR git\-workflow (1)

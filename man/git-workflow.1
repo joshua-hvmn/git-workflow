@@ -1,6 +1,6 @@
-.TH GIT-WORKFLOW 1 2026-10-11 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW 1 2026-10-12 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow \- git flow and trunk flow, with SemVer releases and guardrails
+git-workflow \- git flow, GitHub flow or your own, with SemVer releases and guardrails
 .SH SYNOPSIS
 .B git workflow
 .I command
@@ -11,22 +11,24 @@ git-workflow \- git flow and trunk flow, with SemVer releases and guardrails
 .br
 .B git workflow version
 .SH DESCRIPTION
-git-workflow makes a branching model the default path.
+git-workflow makes a branching model the default path. The model is a
+.IR flow ,
+picked per repository (see
+.BR FLOWS ).
 .PP
 In
-.B git flow
-(the default), topic branches start from and merge into the integration
-branch
+.BR "git flow" ,
+topic branches start from and go back into the integration branch
 .RB ( next ),
 release branches
 .RI ( release/vX.Y.Z )
 start from
 .B next
-and merge into
+and go into
 .BR main ,
 and hotfix branches
 .RI ( hotfix/vX.Y.Z )
-start from and merge into
+start from and go into
 .BR main .
 Every release is tagged on
 .B main
@@ -34,13 +36,19 @@ and merged back into
 .BR next .
 .PP
 In
-.B trunk / GitHub flow
-(set
-.B workflow.devBranch
-equal to
-.BR workflow.mainBranch ),
-everything starts from and merges into
-.BR main .
+.BR "GitHub flow" ,
+everything starts from and goes back into
+.BR main ,
+and a release is a tag
+.RB ( "git workflow branch pre" " and " release ).
+Hotfixes start from the latest release.
+.PP
+.B git workflow branch finish
+opens a pull request by default, and running it again once that's merged
+tags and cleans up; nothing pushes to the main or dev branch. With a fork,
+the main branch and the tags come from the
+.B upstream
+remote, and your branches go to your fork.
 .PP
 Release and hotfix versions are SemVer with a leading "v".
 .B git workflow branch pre
@@ -57,7 +65,7 @@ is
 .SH COMMANDS
 .TP
 .B branch \fR(\fBb\fR)
-Start, prerelease, finish and delete branches following the flow;
+Start, prerelease, release, finish and delete branches following the flow;
 options go to
 .BR git\-branch (1).
 See
@@ -127,35 +135,106 @@ alias. For a command's own page use
 .B git workflow help branch
 or
 .BR "git workflow branch \-\-help" .
+.SH FLOWS
+A flow is a file of
+.B workflow.*
+settings (the format of
+.BR git\-config (1)).
+Two ship,
+.B gitflow
+and
+.BR github ;
+one in
+.I ~/.config/git\-workflow/flows/<name>
+is a flow too, and can define its own branch types.
+.B workflow.flow
+picks one. Unset, it's guessed: a
+.B next
+branch, or a
+.B develop
+branch (which then becomes the dev branch), means
+.BR gitflow ;
+anything else
+.BR github .
+.B git workflow branch config
+shows the flow, why, and where each setting came from.
+.PP
+Settings are read in layers, a later one winning: the flow file; what the
+repository looks like (its default branch, a develop branch); your global
+git config; the repository's
+.I .gitworkflow
+file; the repository's own git config; and
+.BR "git \-c" .
+.PP
+A repository's
+.I .gitworkflow
+is someone else's file, so it's read as data: values are checked against
+the lists below and a bad one is reported and ignored, branch names must
+be valid, includes aren't followed, and it can't set
+.B workflow.remote
+or
+.BR workflow.upstream .
 .SH CONFIGURATION
-All settings live in
-.BR git\-config (1)
-under
+All settings are optional, under
 .BR workflow. ,
-globally or per repository. All are optional.
+globally or per repository, or in a
+.I .gitworkflow
+file. These apply to the whole flow:
+.TP
+.B workflow.flow
+.BR gitflow ,
+.BR github ,
+or one of yours. Default: guessed (see
+.BR FLOWS ).
 .TP
 .B workflow.mainBranch
-Production branch; stable tags live here. Default:
+Production branch; stable tags live here. Default: the default branch the
+clone recorded for the remote
+.RI ( refs/remotes/<remote>/HEAD ),
+else
 .BR main .
 .TP
 .B workflow.devBranch
-Integration branch. Default:
-.BR next .
-Set it equal to
-.B workflow.mainBranch
-for trunk / GitHub flow.
+Integration branch. Default: the flow's
+.RB ( next
+in
+.BR gitflow ),
+else the main branch. Leave it unset globally, so each repository's is
+worked out from its branches.
+.TP
+.B workflow.integrate
+.B pr
+(default): finishing a branch pushes it and opens a pull request with the
+forge, and finishing it again once it's merged tags it and cleans up.
+.BR merge :
+merge locally, and push everything in one atomic push.
+.TP
+.B workflow.releaseFromMain
+.B true
+lets
+.B git workflow branch pre
+and
+.B git workflow branch release
+tag the main branch directly. Set by the
+.B github
+flow.
 .TP
 .B workflow.remote
-Remote to sync with. Default:
+Where your branches go: your fork, if you work from one. Default:
 .BR origin .
 .TP
-.B workflow.releasePrefix
-Release branch prefix. Default:
-.BR release/ .
+.B workflow.upstream
+Where the main and dev branches and the tags live, and where pull
+requests go. Default: a remote named
+.B upstream
+when there is one, else
+.BR workflow.remote .
 .TP
-.B workflow.hotfixPrefix
-Hotfix branch prefix. Default:
-.BR hotfix/ .
+.B workflow.forge
+What opens pull requests. Default:
+.BR github ,
+through
+.BR gh (1).
 .TP
 .B workflow.prereleaseLabel
 Default label for
@@ -175,23 +254,86 @@ Extra protected branches, in addition to the main and dev branches.
 Multi-valued: use
 .BR "git config \-\-add" .
 .TP
-.B workflow.finishTopic
-.B merge
-(default): finishing a topic branch merges it locally and pushes.
-.BR pr :
-push the branch and open a pull request with
-.BR gh (1)
-instead, for repositories whose dev branch only accepts pull requests.
-.TP
 .B workflow.versionFile
 File that holds the project's version. When it exists,
-.B git workflow branch pre
+.BR "git workflow branch pre" ,
+.B release
 and
-.B git workflow branch finish
+.B finish
 check that it matches the version being tagged ("v1.2.3" or "1.2.3").
 Default:
 .BR VERSION .
 An empty value disables the check.
+.PP
+Each branch type has these, as
+.BR workflow.<type>.<key> :
+.TP
+.B prefix
+Branch name prefix
+.RI ( release/ ).
+One type has none; branches no other prefix matches belong to it.
+.TP
+.B from
+.BR main ,
+.B dev
+or
+.BR latest\-release :
+what
+.B start
+branches from.
+.TP
+.B into
+.B main
+or
+.BR dev :
+what
+.B finish
+integrates into.
+.B none
+removes the type.
+.TP
+.B integrate
+.B pr
+or
+.BR merge ,
+overriding
+.B workflow.integrate
+for this type.
+.TP
+.B tag
+.BR none ,
+.B merge
+or
+.BR tip :
+tag
+.I vX.Y.Z
+(named in the branch) on the merge, or on the branch's tested tip. Any
+but
+.B none
+makes the type versioned: its branches are named
+.IR vX.Y.Z .
+.TP
+.B backMerge
+.B none
+or
+.BR dev :
+after integrating into the main branch, merge it into the dev branch.
+.TP
+.B single
+.B true
+allows one branch of the type open at a time.
+.PP
+The 2.x names still work:
+.B workflow.releasePrefix
+is
+.BR workflow.release.prefix ,
+.B workflow.hotfixPrefix
+is
+.BR workflow.hotfix.prefix ,
+and
+.B workflow.finishTopic
+is
+.BR workflow.topic.integrate .
 .SH GUARDRAILS
 These warn and ask, or stop when
 .B workflow.strict
@@ -201,17 +343,24 @@ committing or pushing directly on a protected branch
 .IP \(bu 2
 release or hotfix names that aren't vX.Y.Z, or aren't newer than the latest release
 .IP \(bu 2
-opening a second release branch while one is open
+opening a second branch of a
+.B single
+type (git flow's releases) while one is open
 .IP \(bu 2
 cutting a prerelease from a branch that isn't a release or hotfix branch,
 or with a tag whose version doesn't match the branch
 .IP \(bu 2
 tagging with uncommitted changes, with commits the remote branch doesn't
 have, or with a version file that doesn't match
+.IP \(bu 2
+finishing a release with commits after its last prerelease, or releasing
+with no prerelease
 .PP
 These always stop: reusing an existing tag, prereleasing a version that
 already shipped, finishing or deleting a protected branch, force-pushing a
-protected branch, tagging a branch that is behind its remote, deleting a
+protected branch, pushing a branch that only takes pull requests, tagging
+a branch that is behind its remote, tagging local commits the remote main
+branch doesn't have, tagging the tip of a squash-merged release, deleting a
 branch with unmerged commits without
 .BR \-f ,
 and finishing (or deleting the current branch) with uncommitted changes.
@@ -221,9 +370,11 @@ and finishing (or deleting the current branch) with uncommitted changes.
 When set, messages are not colored.
 .TP
 .B XDG_CONFIG_HOME
-Where your alias sets go: its
+Where your alias sets and flows go: its
 .I git\-workflow/aliases/
-directory. Default:
+and
+.I git\-workflow/flows/
+directories. Default:
 .IR ~/.config .
 .SH FILES
 .TP
@@ -241,6 +392,24 @@ general-purpose ones
 .TP
 .I <prefix>/share/git\-workflow/aliases/
 The defaults they are copied from.
+.TP
+.I ~/.config/git\-workflow/flows/
+Your flows; one named like a shipped flow replaces it.
+.TP
+.I <prefix>/share/git\-workflow/flows/
+The flows that ship:
+.B gitflow
+and
+.BR github .
+.TP
+.I <prefix>/share/git\-workflow/forges/
+What opens pull requests:
+.I github.sh
+uses
+.BR gh (1).
+.TP
+.I .gitworkflow
+In a repository: its flow and settings, for everyone who works on it.
 .TP
 .I <prefix>/share/bash\-completion/completions/git\-workflow
 Bash completion for

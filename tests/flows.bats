@@ -41,8 +41,8 @@ load test_helper
     no_local_branch foo
 }
 
-@test "trunk mode: release finish tags main and leaves next alone" {
-    git config workflow.devBranch main
+@test "a flow without next, plus release branches: finish tags the release and leaves next alone" {
+    printf '[workflow]\n    flow = github\n[workflow "release"]\n    prefix = release/\n    from = main\n    into = main\n    tag = tip\n' >.gitworkflow
     git b start release v1.1.0 >/dev/null 2>&1
     commit_change a "release fix"
     next_before=$(git rev-parse origin/next)
@@ -50,7 +50,7 @@ load test_helper
     run git b finish <<<$'y\ny'
     [ "$status" -eq 0 ]
     git fetch -q origin
-    [ "$(git rev-parse 'v1.1.0^{commit}')" = "$(git rev-parse origin/main)" ]
+    git merge-base --is-ancestor 'v1.1.0^{commit}' origin/main
     [ "$(git rev-parse origin/next)" = "$next_before" ]
 }
 
@@ -95,7 +95,7 @@ load test_helper
 }
 
 @test "topic, pr mode: an open pull request is reported, not duplicated" {
-    fake_gh "https://github.com/o/r/pull/7"
+    fake_gh "OPEN https://github.com/o/r/pull/7"
     git config workflow.finishTopic pr
     local_next
     git b start topic foo >/dev/null 2>&1
@@ -107,11 +107,11 @@ load test_helper
     [ ! -s "$GH_LOG" ]
 }
 
-@test "config: an invalid finishTopic warns and falls back to merge" {
-    git config workflow.finishTopic squash
+@test "config: an invalid integrate warns and falls back" {
+    git config workflow.finishTopic squash # the 2.x name for workflow.topic.integrate
     run git b config
-    [[ "$output" == *"finishTopic must be"* ]]
-    [[ "$output" == *"finishTopic      merge"* ]]
+    [[ "$output" == *"workflow.topic.integrate (git config) must be one of: pr merge; not 'squash'. Using merge."* ]]
+    [[ "$output" == *"topic     (no prefix) from next into next by merge"* ]]
 }
 
 @test "start: still allows tracked edits (carried like git switch -c)" {

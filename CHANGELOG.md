@@ -1,5 +1,59 @@
 # Changelog
 
+## v3.0.0
+
+### Changed
+
+- **Flows are data, not code.** A flow is a file of `workflow.*` settings: where each branch
+  type starts, what `finish` integrates it into, how, where the tag goes and what's merged back.
+  Two ship, `gitflow` and `github` (in `share/flows/`), and one in
+  `~/.config/git-workflow/flows/<name>` is a flow too, with branch types of its own if it likes.
+  `workflow.flow` picks one; unset, it's guessed from the branches (`next` or `develop` means git
+  flow), and `git b config` says so.
+- **`finish` opens a pull request by default** (`workflow.integrate`, default `pr`), so it's safe
+  on repositories you don't own. Run it again once the pull request is merged, however it was
+  merged: it deletes the branch, and for a release or hotfix tags it and pushes only the tag (in
+  git flow, then opens the back-merge pull request into the dev branch). To merge locally as
+  before: `git config workflow.integrate merge`, for the flow or per branch type
+  (`workflow.release.integrate`).
+- Settings are read in layers: the flow, what the repository looks like, your global config, the
+  repository's `.gitworkflow`, its `.git/config`, then `git -c`. `git b config` shows where each
+  one came from. `workflow.mainBranch` defaults to the remote's default branch (`master`, say).
+- `git b start <type>` takes any of the flow's branch types. The 2.x names still work:
+  `workflow.releasePrefix` and `workflow.hotfixPrefix` are `workflow.<type>.prefix`, and
+  `workflow.finishTopic` is `workflow.topic.integrate`. A global `workflow.devBranch` now
+  applies to every repository, so unset it and let each one's be worked out.
+
+### Added
+
+- `.gitworkflow`: a repository commits its flow and settings, and every contributor's `git b`
+  follows it. It's read as data: values are checked, branch names validated, includes not
+  followed, and it can't set your remotes.
+- GitHub flow releases from `main`: `git b pre` on `main` tags `vX.Y.Z-rc.N` (version from
+  `VERSION`, or `git b pre vX.Y.Z`), and the new `git b release [vX.Y.Z]` tags the newest
+  prerelease's commit as `vX.Y.Z`, pushing only the tag. The release is exactly what was tested.
+- Forks: `workflow.upstream` (default: a remote named `upstream`) is where `main`, the dev
+  branch and the tags come from, and where pull requests go, from `<you>:<branch>`. Your
+  branches go to `workflow.remote`, your fork.
+- Forges: pull requests go through `share/forges/<workflow.forge>.sh`; `github` (with `gh`)
+  ships. Another host is another file with the same six functions.
+- `git b delete` counts a branch whose pull request was squash- or rebase-merged as merged.
+- `git b finish` flags a release branch with commits after its last prerelease.
+- `git b pre vX.Y.Z` names the version on any branch.
+- Where a branch only takes pull requests, `git ps` and `git qc p` refuse to push it (`qc`
+  before committing) and say how to move the commits to a branch.
+- Tab completion for `release`, the flow's own branch types, and remote branches for `pull`
+  and `sync`.
+- This repository's own `.gitworkflow`: git flow, topics by pull request, releases merged
+  locally.
+
+### Fixed
+
+- Trunk mode tagged the merge commit on `main`, so a release also shipped whatever reached
+  `main` after its prereleases. GitHub flow tags the tested commit.
+- Trunk mode started hotfixes from `main`, shipping its unreleased work. GitHub flow starts them
+  from the latest release tag.
+
 ## v2.1.0
 
 ### Added
