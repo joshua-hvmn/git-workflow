@@ -646,3 +646,21 @@ load test_helper
     [[ "$output" != *"Already on"* ]]
     [[ "$output" == *"Prereleases for v1.1.0: v1.1.0-rc.1 v1.1.0-rc.2"$'\n'* ]]
 }
+
+# --- v3.1.0 ------------------------------------------------------------------
+
+@test "finish release (pull request): the tag goes on the merge after main moves on" {
+    local_next
+    fake_gh
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    git push -q origin release/v1.1.0
+    merge_pr release/v1.1.0
+    merge_commit=$(git ls-remote "$REMOTE_DIR" refs/heads/main | cut -f1)
+    remote_commit main b
+    remote_commit main b
+
+    run git b finish <<<$'y\nn\ny'
+    [ "$status" -eq 0 ]
+    [ "$(git rev-parse 'v1.1.0^{commit}')" = "$merge_commit" ]
+}

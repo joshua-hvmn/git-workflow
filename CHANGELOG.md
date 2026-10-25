@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.1.0
+
+### Fixed
+
+- `finish` on a merged pull request found the merge with one `git merge-base` per commit `main`
+  had gained since: 600 commits took 4.5 s. It's one `git rev-list` now.
+
 ## v3.0.0
 
 ### Changed
