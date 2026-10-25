@@ -375,12 +375,9 @@ content_merged() {
 # merge_point <tip> <ref>: the commit on <ref>'s first-parent line that brought
 # <tip> in (the merge commit, or <tip> itself after a fast-forward)
 merge_point() {
-    local tip="$1" ref="$2" c last=""
+    local tip="$1" ref="$2" last
     tip=$(git rev-parse "$tip^{commit}") || return 1
-    for c in $(git rev-list --first-parent "$tip..$ref"); do
-        git merge-base --is-ancestor "$tip" "$c" || break
-        last="$c"
-    done
+    last=$(git rev-list --first-parent --ancestry-path "$tip..$ref" | tail -n 1)
     if [ -z "$last" ] || [ "$(git rev-parse "$last^")" = "$tip" ]; then
         last="$tip"
     fi
