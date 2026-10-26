@@ -670,7 +670,7 @@ load test_helper
     git switch -q main
     run git b delete foo -d
     [ "$status" -eq 0 ]
-    [[ "$output" == *"'-d' is deprecated and goes away in v4; use -y."* ]]
+    [[ "$output" == *"'-d' is deprecated and goes away in v4; use -y, or --yes."* ]]
     no_local_branch foo
 
     git b start topic bar >/dev/null 2>&1
