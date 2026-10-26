@@ -1,4 +1,4 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-10-12 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-10-25 git-workflow "git-workflow manual"
 .SH NAME
 git-workflow-branch \- start, prerelease, release, finish and delete branches following the flow
 .SH SYNOPSIS
@@ -181,6 +181,18 @@ A branch with commits that aren't merged into the main or dev branch
 .B \-f
 is given; one whose pull request was squash- or rebase-merged counts as
 merged. Protected branches are never deleted.
+The 1.x spellings of
+.B \-y
+.RB ( \-d ,
+.BR \-\-d ,
+.BR \-\-delete ,
+.BR \-\-y ,
+and
+.BR y ,
+.B yes
+or
+.B d
+after the branch name) still work, with a warning, until v4.
 .TP
 .B config \fR[\fB\-\-types\fR]
 Show the flow, why it's the flow, every setting with where it came from,

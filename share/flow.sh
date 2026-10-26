@@ -625,7 +625,13 @@ delete_branch() {
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -y | --yes | --y | -d | --d | --delete) no_prompt=1 ;;
+        -y | --yes) no_prompt=1 ;;
+        --y | -d | --d | --delete)
+            # 1.x spellings. -d reads as git branch -d (delete if merged),
+            # the opposite of "don't ask"
+            warn "'$1' is deprecated and goes away in v4; use -y, or --yes."
+            no_prompt=1
+            ;;
         -f | --force | -D) force=1 ;;
         -*)
             err "unknown option: $1. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
@@ -636,7 +642,10 @@ delete_branch() {
                 branch="$1"
             else
                 case "$1" in
-                y | yes | d) no_prompt=1 ;;
+                y | yes | d)
+                    warn "'$1' after the branch name is deprecated and goes away in v4; use -y, or --yes."
+                    no_prompt=1
+                    ;;
                 *)
                     err "too many arguments. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
                     return 1
