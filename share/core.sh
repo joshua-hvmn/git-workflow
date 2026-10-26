@@ -719,6 +719,11 @@ get_user_input() {
     fi
 }
 
+# -y/--yes (start, pre, release, finish): answer the command's questions
+# with yes. Flow warnings still ask, or abort in strict mode: -y means "I
+# meant to do this", not "skip the guardrails".
+ASSUME_YES=''
+
 # yes or no
 yes_no() {
     local yn_message="${1:-"Null"}"
@@ -735,6 +740,12 @@ yes_no() {
         yn_default="n"
         ;;
     esac
+    # flow_warn sets __wf_ask_anyway, so -y never answers a flow warning
+    if [ -n "$ASSUME_YES" ] && [ -z "${__wf_ask_anyway:-}" ]; then
+        info "$yn_message $yn_options: y (-y)"
+        REPLY=y
+        return 0
+    fi
     while :; do
         # End of input (Ctrl-D, or no terminal) declines; the caller says
         # what was aborted, so only end the prompt's line here
@@ -764,6 +775,7 @@ yes_no() {
 # Flow violations: abort in strict mode, otherwise, warn and ask.
 # Returns 0 to continue and 1 to abort
 flow_warn() {
+    local __wf_ask_anyway=1
     warn "$1"
     if [ "$STRICT" = "true" ]; then
         err "aborting (workflow.strict is enabled)."

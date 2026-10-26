@@ -247,7 +247,7 @@ prerelease_usage() {
     local b
     b=$(wf_cmd branch)
     cat <<EOF
-usage: $b prerelease [label | vX.Y.Z | full-tag] [-n|--dry-run] [-l|--list]
+usage: $b prerelease [label | vX.Y.Z | full-tag] [-n|--dry-run] [-l|--list] [-y|--yes]
 
 Tag HEAD of the current $(versioned_prefixes) branch as a prerelease and push the
 tag, which triggers the release workflow (published as a GitHub prerelease).
@@ -260,6 +260,7 @@ the version from vX.Y.Z or the $VERSION_FILE file; then '$b release' promotes it
   $b pre v1.2.3-rc.7  -> exactly that tag
   $b pre -n           -> show the tag that would be created, change nothing
   $b pre -l           -> list prerelease tags for this branch's version
+  $b pre -y           -> answer the questions with yes (flow warnings still ask)
 EOF
 }
 
@@ -280,6 +281,7 @@ prerelease_branch() {
         case "$1" in
         -n | --dry-run) mode="dry" ;;
         -l | --list) mode="list" ;;
+        -y | --yes) ASSUME_YES=1 ;;
         -h | --help)
             prerelease_usage
             return 0
@@ -428,7 +430,7 @@ release_usage() {
     local b
     b=$(wf_cmd branch)
     cat <<EOF
-usage: $b release [vX.Y.Z] [-n|--dry-run]
+usage: $b release [vX.Y.Z] [-n|--dry-run] [-y|--yes]
 
 Flows that release from main (workflow.releaseFromMain): tag the commit a
 prerelease tested as vX.Y.Z and push only the tag. $MAIN_BRANCH isn't pushed, so
@@ -437,6 +439,7 @@ it works when it only takes pull requests. The commit must be on $MAIN_BRANCH.
   $b release          -> v1.2.3 from the newest unreleased prerelease (v1.2.3-rc.2)
   $b release v1.2.3   -> v1.2.3 from its newest prerelease
   $b release -n       -> show what would be tagged, change nothing
+  $b release -y       -> answer the questions with yes (flow warnings still ask)
 EOF
 }
 
@@ -463,6 +466,7 @@ release_main() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
         -n | --dry-run) mode="dry" ;;
+        -y | --yes) ASSUME_YES=1 ;;
         -h | --help)
             release_usage
             return 0
