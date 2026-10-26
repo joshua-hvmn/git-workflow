@@ -232,3 +232,41 @@ load test_helper
     [ "$status" -ne 0 ]
     [[ "$output" == *"not newer"* ]]
 }
+
+@test "-y: pre and finish run without a terminal, answering their questions" {
+    local_next
+    git b start release v1.1.0 -y </dev/null >/dev/null 2>&1
+    commit_change a "release fix"
+
+    run git b pre -y </dev/null
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Push 1 local commit(s) to 'origin/release/v1.1.0' first? [Y/n]: y (-y)"* ]]
+    remote_has_ref refs/tags/v1.1.0-rc.1
+
+    run git b finish --yes </dev/null
+    [ "$status" -eq 0 ]
+    remote_has_ref refs/tags/v1.1.0
+    remote_lacks_ref refs/heads/release/v1.1.0
+    no_local_branch release/v1.1.0
+}
+
+@test "-y: never answers a flow warning" {
+    local_next
+    git b start release v1.1.0 >/dev/null 2>&1
+    commit_change a "release fix"
+    git b pre -y </dev/null >/dev/null 2>&1
+    commit_change a "untested fix"
+
+    run git b finish -y </dev/null
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"commits after v1.1.0-rc.1 that no prerelease tested"* ]]
+    [[ "$output" == *"Aborted."* ]]
+    remote_lacks_ref refs/tags/v1.1.0
+}
+
+@test "-y: an unknown option to finish is an error" {
+    git b start topic foo >/dev/null 2>&1
+    run git b finish -x
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unknown option: -x"* ]]
+}

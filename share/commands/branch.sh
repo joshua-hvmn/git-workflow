@@ -29,6 +29,9 @@ usage: $b [<subcommand>] [args]
   help                                  this message
   version                               show the git-workflow version
 
+start, pre, release, and finish take -y/--yes
+Flow warnings still ask (or abort, with workflow.strict)
+
 Options go to 'git branch' (e.g. '$b -a', '$b -vv').
 Manual: git workflow help branch
 EOF

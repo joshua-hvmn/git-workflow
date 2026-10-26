@@ -64,15 +64,25 @@ _git_workflow() {
         fi
         case "$sub" in
         start)
-            if [ "$n" -eq 2 ]; then
-                # The branch types of this repository's flow
-                __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
-            fi
+            case "$cur" in
+            -*) __gitcomp "--yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    # The branch types of this repository's flow
+                    __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
+                fi
+                ;;
+            esac
             ;;
         finish)
-            if [ "$n" -eq 2 ]; then
-                __gitcomp_direct "$(__git_heads "" "$cur" " ")"
-            fi
+            case "$cur" in
+            -*) __gitcomp "--yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    __gitcomp_direct "$(__git_heads "" "$cur" " ")"
+                fi
+                ;;
+            esac
             ;;
         delete)
             case "$cur" in
@@ -82,12 +92,12 @@ _git_workflow() {
             ;;
         pre | prerelease)
             case "$cur" in
-            -*) __gitcomp "--dry-run --list" ;;
+            -*) __gitcomp "--dry-run --list --yes" ;;
             esac
             ;;
         release)
             case "$cur" in
-            -*) __gitcomp "--dry-run" ;;
+            -*) __gitcomp "--dry-run --yes" ;;
             esac
             ;;
         esac

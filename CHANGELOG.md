@@ -2,6 +2,12 @@
 
 ## v3.1.0
 
+### Added
+
+- **`-y`** for `start`, `pre`, `release` and `finish`: answer their questions with yes, so they
+  can run from a script. Flow warnings still ask (or abort without a terminal, or in strict
+  mode).
+
 ### Changed
 
 - `git b delete`'s 1.x spellings of `-y` (`-d`, `--d`, `--delete`, `--y`, and `y`, `yes` or `d`

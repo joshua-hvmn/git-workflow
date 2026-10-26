@@ -8,18 +8,22 @@ git-workflow-branch \- start, prerelease, release, finish and delete branches fo
 .B git workflow branch start
 .I type
 .RI [ name ]
+.RB [ \-y ]
 .br
 .B git workflow branch pre
 .RI [ label | vX.Y.Z | tag ]
 .RB [ \-n ]
 .RB [ \-l ]
+.RB [ \-y ]
 .br
 .B git workflow branch release
 .RI [ vX.Y.Z ]
 .RB [ \-n ]
+.RB [ \-y ]
 .br
 .B git workflow branch finish
 .RI [ branch ]
+.RB [ \-y ]
 .br
 .B git workflow branch delete
 .RI [ branch ]
@@ -59,9 +63,27 @@ the 1.x name
 works after
 .B git workflow
 too.
+.PP
+.B start ,
+.B pre ,
+.B release
+and
+.B finish
+take
+.B \-y
+.RB ( \-\-yes ):
+answer their questions with yes, printing each one followed by
+.BR "y (\-y)" ,
+so they can run from a script. Flow warnings are not questions
+.B \-y
+answers: they still ask, and abort without a terminal or when
+.B workflow.strict
+is set. Where a question offers to roll back a failed
+.BR finish ,
+yes is the rollback.
 .SH COMMANDS
 .TP
-.B start \fItype\fR [\fIname\fR]
+.B start \fItype\fR [\fIname\fR] [\fB\-y\fR]
 Create a branch of one of the flow's types from where the type says, and
 push it.
 .B config
@@ -84,7 +106,7 @@ Tracked edits come along, as with
 .BR "git switch \-c" .
 A name that already exists locally or on the remote is refused.
 .TP
-.B pre \fR[\fIlabel\fR | \fIvX.Y.Z\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR]
+.B pre \fR[\fIlabel\fR | \fIvX.Y.Z\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR] [\fB\-y\fR]
 Tag the current release or hotfix branch (any versioned type) as a
 prerelease and push the tag.
 With no argument the tag is
@@ -115,7 +137,7 @@ shows what would be tagged and never prompts or stops.
 .B \-l
 lists the prereleases for the branch's version.
 .TP
-.B release \fR[\fIvX.Y.Z\fR] [\fB\-n\fR]
+.B release \fR[\fIvX.Y.Z\fR] [\fB\-n\fR] [\fB\-y\fR]
 In flows that release from the main branch: tag the commit the newest
 prerelease of
 .I vX.Y.Z
@@ -131,7 +153,7 @@ refuses.
 .B \-n
 shows what would be tagged.
 .TP
-.B finish \fR[\fIbranch\fR]
+.B finish \fR[\fIbranch\fR] [\fB\-y\fR]
 Integrate a branch where its type says
 .RB ( config
 shows where).

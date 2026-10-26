@@ -100,7 +100,25 @@ start_type() {
 }
 
 start_branch() {
-    local mode="${1:-}" name="${2:-}" type full others base start_point prompt
+    local mode="" name="" type full others base start_point prompt
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -y | --yes) ASSUME_YES=1 ;;
+        *)
+            # The 1.x/2.x type spellings start with a dash too (-t, --topic)
+            if [ -z "$mode" ]; then
+                mode="$1"
+            elif [ -z "$name" ]; then
+                name="$1"
+            else
+                err "too many arguments. usage: $(wf_cmd branch start "<type> [name] [-y]")"
+                return 1
+            fi
+            ;;
+        esac
+        shift
+    done
 
     if [ -z "$mode" ]; then
         err "usage: $(wf_cmd branch start "<type> [name]"). Types in the $WF_FLOW flow: $(types_list)."
@@ -550,7 +568,26 @@ finish_pr() {
 }
 
 finish_branch() {
-    local branch="${1:-$working_branch}" type
+    local branch="" type
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -y | --yes) ASSUME_YES=1 ;;
+        -*)
+            err "unknown option: $1. usage: $(wf_cmd branch finish "[branch] [-y]")"
+            return 1
+            ;;
+        *)
+            if [ -n "$branch" ]; then
+                err "too many arguments. usage: $(wf_cmd branch finish "[branch] [-y]")"
+                return 1
+            fi
+            branch="$1"
+            ;;
+        esac
+        shift
+    done
+    branch="${branch:-$working_branch}"
 
     if [ -z "$branch" ]; then
         err "not on a branch; pass the branch to finish."
