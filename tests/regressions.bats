@@ -664,3 +664,19 @@ load test_helper
     [ "$status" -eq 0 ]
     [ "$(git rev-parse 'v1.1.0^{commit}')" = "$merge_commit" ]
 }
+
+@test "delete: the 1.x spellings of -y still work, with a deprecation warning" {
+    git b start topic foo >/dev/null 2>&1
+    git switch -q main
+    run git b delete foo -d
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"'-d' is deprecated and goes away in v4; use -y."* ]]
+    no_local_branch foo
+
+    git b start topic bar >/dev/null 2>&1
+    git switch -q main
+    run git b delete bar y
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"'y' after the branch name is deprecated"* ]]
+    no_local_branch bar
+}

@@ -2,6 +2,11 @@
 
 ## v3.1.0
 
+### Changed
+
+- `git b delete`'s 1.x spellings of `-y` (`-d`, `--d`, `--delete`, `--y`, and `y`, `yes` or `d`
+  after the branch name) warn that they go away in v4. `-d` read as `git branch -d`.
+
 ### Fixed
 
 - `finish` on a merged pull request found the merge with one `git merge-base` per commit `main`
