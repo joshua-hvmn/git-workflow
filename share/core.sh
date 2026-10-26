@@ -486,9 +486,6 @@ if conf_get devbranch && [ -n "$CONF_VAL" ]; then
         __wf_problem "workflow.devBranch ($CONF_SRC) '$CONF_VAL' is not a valid branch name; using $MAIN_BRANCH."
     fi
 fi
-# No separate integration branch: trunk / GitHub flow
-TRUNK_MODE=0
-[ "$DEV_BRANCH" = "$MAIN_BRANCH" ] && TRUNK_MODE=1
 
 INTEGRATE="pr"
 if conf_get integrate; then
@@ -653,7 +650,8 @@ type_get() {
 }
 
 # branch_type <branch>: the type a branch belongs to, by the longest prefix
-# that matches, else the type without a prefix. Prints nothing for main/dev.
+# that matches, else the type without a prefix. main and dev match that one
+# too, so callers rule out protected branches first.
 branch_type() {
     local t best="" best_len=-1
     for t in $WF_TYPES; do
