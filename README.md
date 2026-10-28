@@ -586,11 +586,18 @@ make test           # bats suite (needs bats-core: pacman -S bash-bats / apt ins
 make installcheck   # install into a temp dir and run the suite against that copy
 ```
 
+With [GNU parallel](https://www.gnu.org/software/parallel/) installed (`pacman -S parallel` /
+`apt install parallel` / `brew install parallel flock`), `make test` and `make installcheck`
+run `JOBS` tests at a time. That's three per CPU by default, since bats looks for a free slot
+only once a second; on macOS, `flock` saves it waiting a second at a time for its lock as well.
+`make test JOBS=1` runs them in order.
+
 Tests run each command against a throwaway bare remote and clone, with your global git config
-and `~/.config` isolated and the default aliases installed. `tests/regressions.bats` has one test
-per fixed bug, grouped by release; `tests/flows.bats` covers the full flows and guardrails;
+and `~/.config` isolated and the default aliases installed. That fixture is built once per file
+and copied into each test, so a test pays one `cp` for it instead of an aliases install and
+about fifteen git processes. `tests/regressions.bats` has one testper fixed bug, grouped by release; `tests/flows.bats` covers the full flows and guardrails;
 `tests/github-flow.bats` pull requests, releasing from `main` and forks (with a stand-in for
 `gh`, and a remote whose `main` refuses pushes); `tests/flow-config.bats` flows, settings
 layers and `.gitworkflow`; `tests/cli.bats` the program itself, its help and the alias sets. CI runs lint, the suite, and
 `installcheck` on Linux and macOS with its stock Bash 3.2, on every push to a flow branch
-and on pull requests.
+and on pull requests: the suite and `installcheck` as separate jobs, all four at once.

@@ -20,24 +20,36 @@ jobs:
       - name: Lint
         run: make lint
 
+  # The suite against this checkout (make test) and against an installed copy
+  # (make installcheck), on Linux and on macOS with its stock Bash 3.2: four
+  # jobs at once instead of two suites one after the other in each, and each
+  # running its tests in parallel (bats --jobs, which needs GNU parallel)
   test:
+    name: ${{ matrix.suite }} (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        suite: [test, installcheck]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install bats (Linux)
+      - name: Install bats and GNU parallel (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq bats
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends bats parallel
 
-      - name: Install bats (macOS)
+      # Without auto-update, brew installs from the index the runner image came
+      # with, instead of spending most of this step refreshing it. Without
+      # flock, bats --jobs takes turns through macOS's shlock, a second at a time
+      - name: Install bats, GNU parallel and flock (macOS)
         if: runner.os == 'macOS'
-        run: brew install bats-core
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+        run: brew install bats-core parallel flock
 
       # macOS ships Bash 3.2 as /bin/bash. Put it first on PATH so
       # `#!/usr/bin/env bash` runs the oldest Bash the README promises.
@@ -49,10 +61,10 @@ jobs:
           echo "$RUNNER_TEMP/bash32" >>"$GITHUB_PATH"
 
       - name: Versions
-        run: bash --version | head -n 1 && git --version && bats --version
+        run: |
+          bash --version | head -n 1 && git --version && bats --version
+          parallel --version | head -n 1
+          make help | grep -w JOBS
 
-      - name: Test
-        run: make test
-
-      - name: Test an installed copy
-        run: make installcheck
+      - name: make ${{ matrix.suite }}
+        run: make ${{ matrix.suite }}

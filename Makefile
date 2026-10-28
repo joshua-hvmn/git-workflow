@@ -53,6 +53,12 @@ LINKDIR		?= $(HOME)/.local/bin
 # Alias sets for `make aliases` / `make unaliases` (empty: install/uninstall defaults)
 SETS ?=
 
+# Tests run JOBS at a time (bats --jobs, which needs GNU parallel), or one at a
+# time without it. bats looks for a free slot only once a second, which leaves
+# one test per CPU idle about half the time; three per CPU keeps them busy.
+# JOBS=1 runs them in order.
+JOBS ?= $(shell n=$$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1); echo $$((n * 3)))
+
 # --- Files --------------------------------------------------------------------
 
 PROGRAM		:= bin/$(NAME)
@@ -147,6 +153,12 @@ unlink_1x = for s in $(OLD_COMMANDS); do \
 		fi; \
 	done
 
+# --jobs for bats, when JOBS is more than one and GNU parallel is there to run
+# them; empty otherwise. bats_note says why the tests run one at a time.
+BATS_JOBS = $(if $(filter-out 0 1,$(JOBS)),$(if $(shell command -v parallel 2>/dev/null),--jobs $(JOBS)))
+# (No commas in the message: they'd end the $(if)'s argument.)
+bats_note = $(if $(BATS_JOBS),:,$(if $(filter-out 0 1,$(JOBS)),echo "note: GNU parallel is not installed; the tests run one at a time",:))
+
 # $(call path_note,DIR): after a real (unstaged) install into DIR, say when the
 # program can't be found, or when another copy earlier on PATH runs instead
 path_note = [ -n "$(DESTDIR)" ] || { \
@@ -181,7 +193,8 @@ help:
 		BINDIR  '$(BINDIR)'  DATADIR '$(DATADIR)' \
 		DOCDIR  '$(DOCDIR)'  MANDIR  '$(MANDIR)' \
 		COMPLETIONDIR '$(COMPLETIONDIR)' \
-		LINKDIR '$(LINKDIR)' SETS    '$(or $(SETS),(defaults))'
+		LINKDIR '$(LINKDIR)' SETS    '$(or $(SETS),(defaults))' \
+		JOBS    '$(JOBS)$(if $(BATS_JOBS),, (GNU parallel not installed: one at a time))'
 
 ##@ Install
 
@@ -283,10 +296,12 @@ lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the
 	fi
 
 # Tests run with stdin closed: one that would wait for an answer fails instead
-# of hanging, and BATS_TEST_TIMEOUT stops one that hangs anyway.
-test: ## Run the bats suite against this checkout
-	@$(say) TEST tests
-	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) tests </dev/null
+# of hanging, and BATS_TEST_TIMEOUT stops one that hangs anyway. Each one has a
+# repository and git config of its own, so they can run in parallel (JOBS).
+test: ## Run the bats suite against this checkout, JOBS tests at a time
+	@$(say) TEST "tests$(if $(BATS_JOBS), ($(JOBS) at a time))"
+	$(Q)$(bats_note)
+	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null
 
 check: test ## Same as test (the name packaging tools run)
 
@@ -296,8 +311,9 @@ installcheck: ## Install into a temporary PREFIX, test that copy, then check uni
 	prefix="$$tmp/install root" && \
 	$(say) INSTALL "$$prefix" && \
 	$(MAKE) --no-print-directory install PREFIX="$$prefix" >/dev/null && \
-	$(say) TEST "$$prefix/bin" && \
-	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) tests </dev/null && \
+	$(say) TEST "$$prefix/bin$(if $(BATS_JOBS), ($(JOBS) at a time))" && \
+	$(bats_note) && \
+	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null && \
 	$(say) UNINST "$$prefix" && \
 	$(MAKE) --no-print-directory uninstall PREFIX="$$prefix" >/dev/null && \
 	left=$$(find "$$prefix" -type f -o -type l -o -name "*$(NAME)*") && \

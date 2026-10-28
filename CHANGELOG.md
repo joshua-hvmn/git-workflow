@@ -12,6 +12,10 @@
 
 - `git b delete`'s 1.x spellings of `-y` (`-d`, `--d`, `--delete`, `--y`, and `y`, `yes` or `d`
   after the branch name) warn that they go away in v4. `-d` read as `git branch -d`.
+- `make test`, `make check` and `make installcheck` run the suite in parallel, `JOBS` tests at a
+  time (three per CPU), when GNU parallel is installed; `JOBS=1` runs it in order. Each test
+  copies a fixture built once per file instead of building its own, which halves what a test
+  costs before it starts.
 
 ### Fixed
 
