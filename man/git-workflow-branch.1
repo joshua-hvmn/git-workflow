@@ -1,4 +1,4 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-10-25 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-10-29 git-workflow "git-workflow manual"
 .SH NAME
 git-workflow-branch \- start, prerelease, release, finish and delete branches following the flow
 .SH SYNOPSIS
@@ -7,7 +7,7 @@ git-workflow-branch \- start, prerelease, release, finish and delete branches fo
 .br
 .B git workflow branch start
 .I type
-.RI [ name ]
+.RI [ name | version | \fBmajor\fR | \fBminor\fR | \fBpatch\fR ]
 .RB [ \-y ]
 .br
 .B git workflow branch pre
@@ -31,7 +31,7 @@ git-workflow-branch \- start, prerelease, release, finish and delete branches fo
 .RB [ \-f ]
 .br
 .B git workflow branch config
-.RB [ \-\-types ]
+.RB [ \-\-types | \-\-versioned\-types ]
 |
 .B help
 |
@@ -81,6 +81,17 @@ answers: they still ask, and abort without a terminal or when
 is set. Where a question offers to roll back a failed
 .BR finish ,
 yes is the rollback.
+.PP
+Versions are SemVer after the tag prefix
+.RB ( workflow.tagPrefix ,
+default
+.BR v ),
+written
+.I vX.Y.Z
+below. A version typed without the prefix gets it:
+.B start release 1.2.0
+is
+.BR release/v1.2.0 .
 .SH COMMANDS
 .TP
 .B start \fItype\fR [\fIname\fR] [\fB\-y\fR]
@@ -98,7 +109,21 @@ from the main branch. In
 topic branches start from the main branch and
 .I hotfix/vX.Y.Z
 from the latest release tag, since the main branch already has unreleased
-work. Versions are checked against existing tags. The 2.x spellings
+work. Versions are checked against existing tags. For a release or hotfix
+branch (any versioned type),
+.BR major ,
+.B minor
+or
+.B patch
+in place of the version names the next one after the latest release
+(after 0.0.0 when there's none). When the
+.B workflow.versionFile
+file has a different version, start offers to set it and commit
+.RB \(lq "bump version to" " \fIvX.Y.Z\fR\(rq,"
+keeping how the file writes it, and says when a lock file
+.RB ( Cargo.lock ,
+.BR package\-lock.json )
+records the version too. The 2.x spellings
 .RB ( t ,
 .BR \-\-topic ,
 \&...) still work.
@@ -216,17 +241,19 @@ or
 .B d
 after the branch name) still work, with a warning, until v4.
 .TP
-.B config \fR[\fB\-\-types\fR]
+.B config \fR[\fB\-\-types\fR | \fB\-\-versioned\-types\fR]
 Show the flow, why it's the flow, every setting with where it came from,
 and the branch types.
 .B \-\-types
-prints only the type names.
+prints only the type names, and
+.B \-\-versioned\-types
+the ones whose branches are named by version.
 .TP
 .B version
 Show the installed version.
 .SH EXAMPLES
 .nf
-git workflow branch start release v1.2.0
+git workflow branch start release minor  # release/v1.2.0 after v1.1.x; offers to bump VERSION
 git workflow branch pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
 git workflow branch pre              # v1.2.0\-rc.2
 git workflow branch finish           # pull request into main; once it's merged,

@@ -100,7 +100,7 @@ start_type() {
 }
 
 start_branch() {
-    local mode="" name="" type full others base start_point prompt
+    local mode="" name="" type full others base start_point prompt latest
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -141,7 +141,7 @@ start_branch() {
         base=""
         start_point=$(latest_stable_tag)
         if [ -z "$start_point" ]; then
-            err "there's no release to start a $type branch from yet (no vX.Y.Z tag)."
+            err "there's no release to start a $type branch from yet (no $VFMT tag)."
             return 1
         fi
         ;;
@@ -153,9 +153,19 @@ start_branch() {
     esac
 
     prompt="Enter the new $type branch's name:"
-    type_versioned "$type" && prompt="Enter the version (e.g., v1.2.3):"
+    type_versioned "$type" && prompt="Enter the version ($VEX, or major, minor or patch):"
     get_user_input "$name" "$prompt" || return 1
     name="$REPLY"
+    if type_versioned "$type"; then
+        case "$name" in
+        major | minor | patch)
+            name=$(bump_version "$name")
+            latest=$(latest_stable_tag)
+            info "Next $REPLY version: $name${latest:+ (after $latest)}."
+            ;;
+        *) name=$(normalize_version "$name") ;;
+        esac
+    fi
     type_get "$type"
     full="$T_PREFIX$name"
 
@@ -191,6 +201,10 @@ start_branch() {
         pull_branch "$base" || return 1
     fi
     git switch -c "$full" "$start_point" || return 1
+    if type_versioned "$type"; then
+        offer_version_commit "$name" ||
+            note "Set $VERSION_FILE to $name and commit it before $(wf_cmd branch pre)."
+    fi
     git push -u "$REMOTE" "$full"
 }
 
@@ -753,15 +767,24 @@ delete_branch() {
     info "Branch $branch deleted. You're on $(get_working_branch)."
 }
 
-# show_config [--types]: the effective settings, and where each came from.
-# --types prints only the branch type names (for tab completion).
+# show_config [--types | --versioned-types]: the effective settings, and
+# where each came from. --types prints only the branch type names, and
+# --versioned-types the ones named by version (for tab completion).
 show_config() {
     local t from into how tag extra
-    if [ "${1:-}" = --types ]; then
+    case "${1:-}" in
+    --types)
         # shellcheck disable=SC2086 # a list
         printf '%s\n' $WF_TYPES
         return 0
-    fi
+        ;;
+    --versioned-types)
+        for t in $WF_TYPES; do
+            type_versioned "$t" && printf '%s\n' "$t"
+        done
+        return 0
+        ;;
+    esac
 
     cat <<EOF
 git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
@@ -776,6 +799,7 @@ git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
   prereleaseLabel  $PRERELEASE_LABEL$(__cfg_src prereleaselabel)
   strict           $STRICT$(__cfg_src strict)
   versionFile      ${VERSION_FILE:-(disabled)}$(__cfg_src versionfile)
+  tagPrefix        ${TAG_PREFIX:-(none)}$(__cfg_src tagprefix)
   protected        $MAIN_BRANCH$([ "$DEV_BRANCH" != "$MAIN_BRANCH" ] && printf ' %s' "$DEV_BRANCH")${EXTRA_PROTECTED}
 EOF
     [ -n "$WF_REPO_FILE" ] && printf '  repository file  %s\n' "$WF_REPO_FILE"
@@ -790,8 +814,8 @@ EOF
         [ "$T_INTEGRATE" = pr ] && how="pull request"
         tag=""
         case "$T_TAG" in
-        merge) tag=", tags vX.Y.Z on the merge" ;;
-        tip) tag=", tags vX.Y.Z on its tested tip" ;;
+        merge) tag=", tags $VFMT on the merge" ;;
+        tip) tag=", tags $VFMT on its tested tip" ;;
         esac
         extra=""
         [ "$T_BACK" = dev ] && [ "$DEV_BRANCH" != "$into" ] && extra="$extra, merged back into $DEV_BRANCH"

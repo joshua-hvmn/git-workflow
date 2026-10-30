@@ -123,7 +123,10 @@ wf_version() {
 #   workflow.forge             what opens pull requests (default: github, through gh)
 #   workflow.prereleaseLabel   default label for `pre` (rc)
 #   workflow.strict            true: flow violations abort instead of asking
-#   workflow.versionFile       must match the version being tagged; "" disables
+#   workflow.versionFile       must match the version being tagged; "" disables.
+#                              package.json, Cargo.toml and pyproject.toml are read
+#                              as such; any other file holds just the version
+#   workflow.tagPrefix         what comes before X.Y.Z in tags and branch names (v)
 #   workflow.protected         extra protected branches (multi-valued)
 #
 # A key with a dot belongs to a branch type, workflow.<type>.<key>:
@@ -132,7 +135,7 @@ wf_version() {
 #   from        main | dev | latest-release: where `start` branches it from
 #   into        main | dev | none: where `finish` integrates it (none: no such type)
 #   integrate   pr | merge (default: workflow.integrate)
-#   tag         none | merge | tip: tag vX.Y.Z (named in the branch) on the merge
+#   tag         none | merge | tip: tag <tagPrefix>X.Y.Z (named in the branch) on the merge
 #               commit or on the branch's tested tip; anything but none makes the
 #               type versioned
 #   backMerge   none | dev: after merging into main, merge main into dev
@@ -216,7 +219,7 @@ wf_flows() {
 
 # The keys each kind of source may set. Branch type keys are allowed wherever
 # "type" is listed.
-__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile type "
+__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile tagprefix type "
 __WF_REPO_KEYS=" flow$__WF_FLOW_KEYS strict protected forge "
 __WF_GIT_KEYS="$__WF_REPO_KEYS remote upstream "
 __WF_TYPE_KEYS=" prefix from into integrate tag backmerge single "
@@ -504,7 +507,29 @@ if conf_get prereleaselabel; then
 fi
 
 VERSION_FILE=VERSION
-conf_get versionfile && VERSION_FILE="$CONF_VAL"
+if conf_get versionfile; then
+    # A path in the repository: `start` may write to it, and .gitworkflow is
+    # someone else's file
+    case "/$CONF_VAL/" in
+    //*/ | */../* | */-*)
+        __wf_problem "workflow.versionFile ($CONF_SRC) '$CONF_VAL' must be a path inside the repository; using VERSION."
+        ;;
+    *) VERSION_FILE="$CONF_VAL" ;;
+    esac
+fi
+
+# Versions are <tagPrefix>X.Y.Z, in tags and in branch names (release/v1.2.3).
+# "" for 1.2.3, or a path for one package of several (pkg/v1.2.3).
+TAG_PREFIX=v
+if conf_get tagprefix; then
+    if [ -z "$CONF_VAL" ] || __wf_valid_branch "${CONF_VAL}1.0.0"; then
+        TAG_PREFIX="$CONF_VAL"
+    else
+        __wf_problem "workflow.tagPrefix ($CONF_SRC) '$CONF_VAL' can't start a tag name; using v."
+    fi
+fi
+# How a version looks, for messages: vX.Y.Z, and an example, v1.2.3
+VFMT="${TAG_PREFIX}X.Y.Z" VEX="${TAG_PREFIX}1.2.3"
 
 FORGE=github
 if conf_get forge; then
@@ -667,7 +692,7 @@ branch_type() {
     printf '%s' "$best"
 }
 
-# Type is versioned: its branches are named vX.Y.Z and finish with a tag
+# Type is versioned: its branches are named <tagPrefix>X.Y.Z and finish with a tag
 type_versioned() {
     type_get "$1" && [ "$T_TAG" != none ]
 }

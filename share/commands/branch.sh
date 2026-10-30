@@ -21,8 +21,8 @@ branch_usage() {
 usage: $b [<subcommand>] [args]
 
   start <type> [name]                   start a branch ($WF_FLOW flow: $(types_list))
-  prerelease|pre [label|tag] [-n] [-l]  tag a versioned branch as vX.Y.Z-<label>.N and push
-  release [vX.Y.Z] [-n]                 tag the newest prerelease's commit vX.Y.Z (flows that release from main)
+  prerelease|pre [label|tag] [-n] [-l]  tag a versioned branch as $VFMT-<label>.N and push
+  release [$VFMT] [-n]                 tag the newest prerelease's commit $VFMT (flows that release from main)
   finish [branch]                       integrate per the flow (merge, or pull request), tag, push
   delete [branch] [-y] [-f]             delete a branch locally and on the remote (-f: even if unmerged)
   config                                show the flow and effective settings
