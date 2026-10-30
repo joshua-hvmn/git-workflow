@@ -70,6 +70,10 @@ _git_workflow() {
                 if [ "$n" -eq 2 ]; then
                     # The branch types of this repository's flow
                     __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
+                elif [ "$n" -eq 3 ] && __git workflow branch config --versioned-types 2>/dev/null |
+                    grep -qxF -- "${args[2]}"; then
+                    # A version: the next major, minor or patch release
+                    __gitcomp "major minor patch"
                 fi
                 ;;
             esac

@@ -21,23 +21,77 @@ if [ -z "${__WF_CORE_LOADED:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Version helpers (SemVer with a leading "v": v1.2.3, v1.2.3-rc.1)
+# Version helpers. A version is SemVer after workflow.tagPrefix (TAG_PREFIX,
+# default "v"): v1.2.3, v1.2.3-rc.1; with tagPrefix "", 1.2.3.
 # ---------------------------------------------------------------------------
 
-# vX.Y.Z only
+# The SemVer part: X.Y.Z, and X.Y.Z-<dot separated identifiers>
+__is_semver() {
+    [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+}
+__is_semver_pre() {
+    [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]
+}
+
+# <tagPrefix>X.Y.Z only
 is_stable_version() {
-    [[ "$1" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+    case "$1" in
+    "$TAG_PREFIX"*) __is_semver "${1#"$TAG_PREFIX"}" ;;
+    *) return 1 ;;
+    esac
 }
 
-# vX.Y.Z-<dot separated identifiers>
+# <tagPrefix>X.Y.Z-<dot separated identifiers>
 is_prerelease_version() {
-    [[ "$1" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]
+    case "$1" in
+    "$TAG_PREFIX"*) __is_semver_pre "${1#"$TAG_PREFIX"}" ;;
+    *) return 1 ;;
+    esac
 }
 
-# version_gt A B -> true if A > B. Both must be vX.Y.Z (callers validate first).
-# MacOS/BSD compatible sort instead of sort -V
+# version_base v1.2.3-rc.1 -> v1.2.3 (a tag prefix may contain "-" itself)
+version_base() {
+    local rest="${1#"$TAG_PREFIX"}"
+    printf '%s%s' "$TAG_PREFIX" "${rest%%-*}"
+}
+
+# normalize_version <word>: a version typed without the tag prefix, or with
+# a "v" the prefix doesn't have, as this repository's tags spell it (1.2.3 ->
+# v1.2.3). Anything else comes back unchanged.
+normalize_version() {
+    local core="${1#v}"
+    if is_stable_version "$1" || is_prerelease_version "$1"; then
+        printf '%s' "$1"
+    elif __is_semver "$1" || __is_semver_pre "$1"; then
+        printf '%s%s' "$TAG_PREFIX" "$1"
+    elif __is_semver "$core" || __is_semver_pre "$core"; then
+        printf '%s%s' "$TAG_PREFIX" "$core"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+# bump_version <major|minor|patch>: the next version after the latest
+# release (after 0.0.0 when there's none)
+bump_version() {
+    local latest x y z
+    latest=$(latest_stable_tag)
+    latest="${latest#"$TAG_PREFIX"}"
+    latest="${latest:-0.0.0}"
+    x="${latest%%.*}" z="${latest##*.}" y="${latest#*.}" y="${y%.*}"
+    case "$1" in
+    major) x=$((x + 1)) y=0 z=0 ;;
+    minor) y=$((y + 1)) z=0 ;;
+    patch) z=$((z + 1)) ;;
+    *) return 1 ;;
+    esac
+    printf '%s%d.%d.%d' "$TAG_PREFIX" "$x" "$y" "$z"
+}
+
+# version_gt A B -> true if A > B. Both must be stable versions (callers
+# validate first). MacOS/BSD compatible sort instead of sort -V
 version_gt() {
-    local a="${1#v}" b="${2#v}" a1 a2 a3 b1 b2 b3
+    local a="${1#"$TAG_PREFIX"}" b="${2#"$TAG_PREFIX"}" a1 a2 a3 b1 b2 b3
     a1=${a%%.*} a3=${a##*.} a2=${a#*.} a2=${a2%.*}
     b1=${b%%.*} b3=${b##*.} b2=${b#*.} b2=${b2%.*}
     if [ "$a1" -ne "$b1" ]; then return $((a1 > b1 ? 0 : 1)); fi
@@ -47,7 +101,7 @@ version_gt() {
 
 latest_stable_tag() {
     local t
-    for t in $(git tag --list 'v*' --sort=-v:refname); do
+    for t in $(git tag --list "$TAG_PREFIX*" --sort=-v:refname); do
         if is_stable_version "$t"; then
             printf '%s' "$t"
             return 0
@@ -60,7 +114,7 @@ tag_exists() {
     git show-ref --verify --quiet "refs/tags/$1"
 }
 
-# not_released <rev>: fail, saying so, when <rev> already carries a vX.Y.Z tag
+# not_released <rev>: fail, saying so, when <rev> already carries a release tag
 # (a versioned branch with no commits of its own would tag the last release again)
 not_released() {
     local t
@@ -116,7 +170,7 @@ validate_new_version() {
     local version="$1" latest
 
     if ! is_stable_version "$version"; then
-        flow_warn "'$version' is not a SemVer version (expected vX.Y.Z)." || return 1
+        flow_warn "'$version' is not a SemVer version (expected $VFMT)." || return 1
         return 0
     fi
     if tag_exists "$version"; then
@@ -129,37 +183,200 @@ validate_new_version() {
     fi
 }
 
-# The version in workflow.versionFile at <rev>, as vX.Y.Z; empty when there's
-# no such file or it doesn't hold a vX.Y.Z / X.Y.Z version
+# ---------------------------------------------------------------------------
+# The version file (workflow.versionFile). Its name says how to read it:
+# package.json (the top-level "version"), Cargo.toml ([package], else
+# [workspace.package]), pyproject.toml ([project], else [tool.poetry]).
+# Any other file holds just the version, "1.2.3" or "v1.2.3". awk, not jq or
+# a TOML parser: nothing to install, and nothing in the file is run.
+# ---------------------------------------------------------------------------
+
+version_file_format() {
+    case "${VERSION_FILE##*/}" in
+    package.json) echo json ;;
+    Cargo.toml) echo cargo ;;
+    pyproject.toml) echo pyproject ;;
+    *) echo plain ;;
+    esac
+}
+
+# Prints "<line number><TAB><version as written>" for a JSON document's
+# top-level "version" string, on stdin; nothing if there isn't one
+# shellcheck disable=SC2016 # awk's own $0, not the shell's
+__WF_AWK_JSON='
+{
+    n = length($0)
+    for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (instr) {
+            if (c == "\\") { i++; continue }
+            if (c != "\"") { str = str c; continue }
+            instr = 0
+            if (depth == 1 && state == "key") { key = str; state = "colon" }
+            else if (depth == 1 && state == "value") {
+                if (key == "version") { print NR "\t" str; exit }
+                state = "next"
+            }
+            continue
+        }
+        if (c == "\"") { instr = 1; str = ""; continue }
+        if (c == "{" || c == "[") {
+            if (depth == 0 && c == "{") state = "key"
+            else if (depth == 1 && state == "value") state = "next"
+            depth++
+            continue
+        }
+        if (c == "}" || c == "]") { depth--; continue }
+        if (depth != 1) continue
+        if (c == ":" && state == "colon") state = "value"
+        else if (c == ",") state = "key"
+    }
+}'
+
+# Prints "<line number><TAB><version>" for the first `version = "..."` in the
+# first of the TOML tables named in `tables` that has one
+# shellcheck disable=SC2016 # awk's own $0, not the shell's
+__WF_AWK_TOML='
+BEGIN { n = split(tables, want, " ") }
+/^[ \t]*\[/ {
+    t = $0
+    sub(/^[ \t]*\[+[ \t]*/, "", t)
+    sub(/[ \t]*\].*$/, "", t)
+    table = t
+    next
+}
+/^[ \t]*version[ \t]*=/ && !(table in found) {
+    v = $0
+    sub(/^[^=]*=[ \t]*/, "", v)
+    q = substr(v, 1, 1)
+    if (q != "\"" && q != "\047") next
+    v = substr(v, 2)
+    v = substr(v, 1, index(v, q) - 1)
+    found[table] = NR "\t" v
+}
+END { for (i = 1; i <= n; i++) if (want[i] in found) { print found[want[i]]; exit } }'
+
+# __version_file_locate: reads the file on stdin, prints "<line><TAB><version>"
+__version_file_locate() {
+    case "$(version_file_format)" in
+    json) awk "$__WF_AWK_JSON" ;;
+    cargo) awk -v tables="package workspace.package" "$__WF_AWK_TOML" ;;
+    pyproject) awk -v tables="project tool.poetry" "$__WF_AWK_TOML" ;;
+    *) awk 'NF { gsub(/[ \t\r]/, ""); print NR "\t" $0; exit }' ;;
+    esac
+}
+
+# version_file_raw <rev>: the version as the file at <rev> writes it ("1.2.3",
+# "v1.2.3"). Fails when there's no version file, or (for package.json and the
+# TOML files) when it has no version of its own (setuptools-scm, say).
+version_file_raw() {
+    local content found
+    [ -n "$VERSION_FILE" ] || return 1
+    content=$(git show "$1:$VERSION_FILE" 2>/dev/null) || return 1
+    found=$(printf '%s\n' "$content" | __version_file_locate)
+    if [ -z "$found" ]; then
+        # A plain file says something, even if it's nothing: that's a mismatch
+        [ "$(version_file_format)" = plain ] || return 1
+        return 0
+    fi
+    printf '%s' "${found#*	}"
+}
+
+# The version in workflow.versionFile at <rev>, as this repository's tags
+# spell it (v1.2.3); empty when there's no such file or it doesn't hold one
 file_version() {
     local have
-    [ -n "$VERSION_FILE" ] || return 0
-    have=$(git show "$1:$VERSION_FILE" 2>/dev/null) || return 0
-    have=$(printf '%s' "$have" | tr -d '[:space:]')
-    case "$have" in
-    v*) ;;
-    ?*) have="v$have" ;;
-    esac
+    have=$(version_file_raw "$1") || return 0
+    have=$(normalize_version "$have")
     if is_stable_version "$have"; then
         printf '%s' "$have"
     fi
 }
 
-# check_version_file <rev> <vX.Y.Z> <mode>
+# check_version_file <rev> <version> <mode>
 # If the project keeps its version in a file (workflow.versionFile, default
 # VERSION), the file at <rev> must match the version being tagged. The release
 # workflow checks the same thing, but only after the tag is already public.
-# Accepts "v1.2.3" or "1.2.3". Skipped when the file doesn't exist at <rev>.
+# The file may write it with or without a "v", whatever the tag prefix is.
+# Skipped when the file doesn't exist at <rev>, or has no version of its own.
 check_version_file() {
     local rev="$1" version="$2" mode="$3" have
-
-    [ -n "$VERSION_FILE" ] || return 0
-    have=$(git show "$rev:$VERSION_FILE" 2>/dev/null) || return 0
-    have=$(printf '%s' "$have" | tr -d '[:space:]')
-    if [ "$have" = "$version" ] || [ "v$have" = "$version" ]; then
+    have=$(version_file_raw "$rev") || return 0
+    if [ "${have#v}" = "${version#"$TAG_PREFIX"}" ]; then
         return 0
     fi
     pre_flow_warn "$mode" "$VERSION_FILE says '$have', but this release is $version. Bump it on the branch before tagging."
+}
+
+# version_file_write <version>: set the version in the working tree's version
+# file, keeping how it's written ("v" or not, quotes, spacing). Only a file
+# git tracks: a .gitworkflow names the file, and a path git doesn't know is
+# not one to write.
+version_file_write() {
+    local version="$1" path line have new tmp
+    path="$WF_TOPLEVEL/$VERSION_FILE"
+    if ! git -C "$WF_TOPLEVEL" ls-files --error-unmatch -- "$VERSION_FILE" >/dev/null 2>&1 || [ ! -f "$path" ]; then
+        err "'$VERSION_FILE' isn't a file git tracks here; not writing it."
+        return 1
+    fi
+    line=$(__version_file_locate <"$path")
+    have="${line#*	}"
+    line="${line%%	*}"
+    new="${version#"$TAG_PREFIX"}"
+    case "$have" in v*) new="v$new" ;; esac
+    tmp="$path.git-workflow.$$"
+    if [ "$(version_file_format)" = plain ]; then
+        printf '%s\n' "$new" >"$tmp" || return 1
+    elif [ -n "$line" ]; then
+        awk -v n="$line" -v new="$new" -v fmt="$(version_file_format)" '
+            NR == n {
+                if (fmt == "json") {
+                    if (match($0, /"version"[ \t]*:[ \t]*"[^"]*"/)) {
+                        m = substr($0, RSTART, RLENGTH)
+                        sub(/"[^"]*"$/, "\"" new "\"", m)
+                        $0 = substr($0, 1, RSTART - 1) m substr($0, RSTART + RLENGTH)
+                    }
+                } else if (!sub(/"[^"]*"/, "\"" new "\"")) {
+                    sub(/\047[^\047]*\047/, "\047" new "\047")
+                }
+            }
+            { print }' "$path" >"$tmp" || {
+            rm -f "$tmp"
+            return 1
+        }
+    else
+        err "'$VERSION_FILE' has no version of its own to set."
+        return 1
+    fi
+    # cat, not mv: keep the file's mode and links
+    cat "$tmp" >"$path" && rm -f "$tmp" || return 1
+    line=$(__version_file_locate <"$path")
+    if [ "${line#*	}" != "$new" ]; then
+        err "couldn't find where $VERSION_FILE keeps its version to set it."
+        return 1
+    fi
+}
+
+# offer_version_commit <version>: on a new versioned branch, offer to set
+# the version file to <version> and commit it
+offer_version_commit() {
+    local version="$1" have lock
+    have=$(version_file_raw HEAD) || return 0
+    [ "${have#v}" = "${version#"$TAG_PREFIX"}" ] && return 0
+    yes_no "$VERSION_FILE says '${have:-nothing}'. Set it to $version and commit?" y || return 0
+    version_file_write "$version" || return 1
+    git -C "$WF_TOPLEVEL" commit -q -m "bump version to $version" -- "$VERSION_FILE" || return 1
+    note "Committed $VERSION_FILE at $version."
+    # The lock file records the version too; its own tool updates it
+    case "$(version_file_format)" in
+    json) lock=package-lock.json ;;
+    cargo) lock=Cargo.lock ;;
+    *) lock="" ;;
+    esac
+    case "$VERSION_FILE" in */*) lock="${VERSION_FILE%/*}/$lock" ;; esac
+    if [ -n "${lock##*/}" ] && [ -f "$WF_TOPLEVEL/$lock" ]; then
+        info "$lock records the version too: update it (npm install, cargo update -w) and commit before $(wf_cmd branch pre)."
+    fi
 }
 
 # GitHub Actions URL of the repository the tags go to, if it's on GitHub
@@ -247,17 +464,17 @@ prerelease_usage() {
     local b
     b=$(wf_cmd branch)
     cat <<EOF
-usage: $b prerelease [label | vX.Y.Z | full-tag] [-n|--dry-run] [-l|--list] [-y|--yes]
+usage: $b prerelease [label | $VFMT | full-tag] [-n|--dry-run] [-l|--list] [-y|--yes]
 
 Tag HEAD of the current $(versioned_prefixes) branch as a prerelease and push the
 tag, which triggers the release workflow (published as a GitHub prerelease).
 Flows that release from main (workflow.releaseFromMain) also tag $MAIN_BRANCH, with
-the version from vX.Y.Z or the $VERSION_FILE file; then '$b release' promotes it.
+the version from $VFMT or the $VERSION_FILE file; then '$b release' promotes it.
 
-  $b pre              -> v1.2.3-$PRERELEASE_LABEL.N  (N = next free number)
-  $b pre beta         -> v1.2.3-beta.N
-  $b pre v1.2.3       -> v1.2.3-$PRERELEASE_LABEL.N, for that version
-  $b pre v1.2.3-rc.7  -> exactly that tag
+  $b pre              -> $VEX-$PRERELEASE_LABEL.N  (N = next free number)
+  $b pre beta         -> $VEX-beta.N
+  $b pre $VEX       -> $VEX-$PRERELEASE_LABEL.N, for that version
+  $b pre $VEX-rc.7  -> exactly that tag
   $b pre -n           -> show the tag that would be created, change nothing
   $b pre -l           -> list prerelease tags for this branch's version
   $b pre -y           -> answer the questions with yes (flow warnings still ask)
@@ -309,6 +526,7 @@ prerelease_branch() {
     fi
 
     base=$(branch_version "$branch")
+    arg=$(normalize_version "$arg")
     # Flows with workflow.releaseFromMain release straight from main
     if [ "$RELEASE_FROM_MAIN" = true ] && [ "$branch" = "$MAIN_BRANCH" ]; then
         on_main=1
@@ -318,7 +536,7 @@ prerelease_branch() {
         fi
     fi
 
-    # A plain vX.Y.Z names the version; the label stays the default
+    # A plain X.Y.Z names the version; the label stays the default
     if is_stable_version "$arg"; then
         if [ -n "$base" ] && [ "$arg" != "$base" ] && [ "$mode" != "list" ]; then
             pre_flow_warn "$mode" "'$arg' does not match this branch's version '$base'." || return 1
@@ -329,14 +547,14 @@ prerelease_branch() {
     if [ -n "$on_main" ] && [ -z "$base" ] && ! is_prerelease_version "$arg"; then
         base=$(file_version HEAD)
         if [ -z "$base" ]; then
-            err "no version to prerelease: '$MAIN_BRANCH' has no vX.Y.Z $VERSION_FILE file. Name it: $(wf_cmd branch pre v1.2.3)"
+            err "no version to prerelease: '$MAIN_BRANCH' has no $VFMT in $VERSION_FILE file. Name it: $(wf_cmd branch pre "$VEX")"
             return 1
         fi
     fi
 
     if [ "$mode" = "list" ]; then
         if [ -z "$base" ] || ! is_stable_version "$base"; then
-            err "cannot list prereleases: no vX.Y.Z version in branch name '$branch'"
+            err "cannot list prereleases: no $VFMT version in branch name '$branch'"
             return 1
         fi
         sync_remote
@@ -349,7 +567,7 @@ prerelease_branch() {
     elif [ -z "$base" ]; then
         pre_flow_warn "$mode" "prereleases are cut from $(versioned_prefixes) branches; '$branch' isn't one." || return 1
     elif ! is_stable_version "$base"; then
-        pre_flow_warn "$mode" "branch version '$base' is not vX.Y.Z; cannot derive a prerelease tag from it." || return 1
+        pre_flow_warn "$mode" "branch version '$base' is not $VFMT; cannot derive a prerelease tag from it." || return 1
         base=""
     fi
 
@@ -358,18 +576,18 @@ prerelease_branch() {
     # Work out the tag
     if is_prerelease_version "$arg"; then
         tag="$arg"
-        if [ -n "$base" ] && [ "${tag%%-*}" != "$base" ]; then
+        if [ -n "$base" ] && [ "$(version_base "$tag")" != "$base" ]; then
             pre_flow_warn "$mode" "'$tag' does not match this branch's version '$base'." || return 1
         fi
-        base="${tag%%-*}"
+        base=$(version_base "$tag")
     else
         label="${arg:-$PRERELEASE_LABEL}"
         if ! [[ "$label" =~ ^[0-9A-Za-z-]+$ ]]; then
-            err "invalid prerelease label '$label' (letters, digits and '-' only), or pass a full tag like v1.2.3-rc.1."
+            err "invalid prerelease label '$label' (letters, digits and '-' only), or pass a full tag like $VEX-rc.1."
             return 1
         fi
         if [ -z "$base" ]; then
-            err "no version in branch name; pass a full tag instead, e.g. '$(wf_cmd branch pre v1.2.3-rc.1)'."
+            err "no version in branch name; pass a full tag instead, e.g. '$(wf_cmd branch pre "$VEX-rc.1")'."
             return 1
         fi
         tag=$(next_prerelease_tag "$base" "$label")
@@ -430,14 +648,14 @@ release_usage() {
     local b
     b=$(wf_cmd branch)
     cat <<EOF
-usage: $b release [vX.Y.Z] [-n|--dry-run] [-y|--yes]
+usage: $b release [$VFMT] [-n|--dry-run] [-y|--yes]
 
 Flows that release from main (workflow.releaseFromMain): tag the commit a
-prerelease tested as vX.Y.Z and push only the tag. $MAIN_BRANCH isn't pushed, so
+prerelease tested as $VFMT and push only the tag. $MAIN_BRANCH isn't pushed, so
 it works when it only takes pull requests. The commit must be on $MAIN_BRANCH.
 
-  $b release          -> v1.2.3 from the newest unreleased prerelease (v1.2.3-rc.2)
-  $b release v1.2.3   -> v1.2.3 from its newest prerelease
+  $b release          -> $VEX from the newest unreleased prerelease ($VEX-rc.2)
+  $b release $VEX   -> $VEX from its newest prerelease
   $b release -n       -> show what would be tagged, change nothing
   $b release -y       -> answer the questions with yes (flow warnings still ask)
 EOF
@@ -447,9 +665,9 @@ EOF
 newest_unreleased_version() {
     local t base latest
     latest=$(latest_stable_tag)
-    for t in $(git tag --list 'v*-*' --sort=-v:refname); do
+    for t in $(git tag --list "$TAG_PREFIX*-*" --sort=-v:refname); do
         is_prerelease_version "$t" || continue
-        base="${t%%-*}"
+        base=$(version_base "$t")
         tag_exists "$base" && continue
         if [ -n "$latest" ] && ! version_gt "$base" "$latest"; then
             continue
@@ -459,7 +677,7 @@ newest_unreleased_version() {
     done
 }
 
-# git workflow branch release [vX.Y.Z] [-n]: promote a tested prerelease
+# git workflow branch release [version] [-n] [-y]: promote a tested prerelease
 release_main() {
     local mode="create" version="" latest pre target main_ref sha since what url
 
@@ -503,12 +721,15 @@ release_main() {
     if [ -z "$version" ]; then
         version=$(newest_unreleased_version)
         if [ -z "$version" ]; then
-            err "there's no prerelease to promote. Cut one on '$MAIN_BRANCH' first ($(wf_cmd branch pre)), or name the version: $(wf_cmd branch release v1.2.3)"
+            err "there's no prerelease to promote. Cut one on '$MAIN_BRANCH' first ($(wf_cmd branch pre)), or name the version: $(wf_cmd branch release "$VEX")"
             return 1
         fi
-    elif ! is_stable_version "$version"; then
-        err "'$version' is not a vX.Y.Z version."
-        return 1
+    else
+        version=$(normalize_version "$version")
+        if ! is_stable_version "$version"; then
+            err "'$version' is not a $VFMT version."
+            return 1
+        fi
     fi
     if tag_exists "$version"; then
         err "'$version' has already been released."

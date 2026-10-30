@@ -111,3 +111,16 @@ require_git_completion() {
     run complete "git b --show-c"
     [ "$output" = "--show-current" ]
 }
+
+@test "completion: start offers major, minor and patch for a versioned type, and -y" {
+    require_git_completion
+    git switch -q next
+    run complete "git b start release "
+    [ "$output" = $'major\nminor\npatch' ]
+    run complete "git b start topic "
+    [ "$output" = "" ]
+    run complete "git b finish --"
+    [ "$output" = "--yes" ]
+    run complete "git b pre --"
+    [[ "$output" == *"--yes"* ]]
+}

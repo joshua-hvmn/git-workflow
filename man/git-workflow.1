@@ -1,4 +1,4 @@
-.TH GIT-WORKFLOW 1 2026-10-12 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW 1 2026-10-29 git-workflow "git-workflow manual"
 .SH NAME
 git-workflow \- git flow, GitHub flow or your own, with SemVer releases and guardrails
 .SH SYNOPSIS
@@ -255,15 +255,47 @@ Multi-valued: use
 .BR "git config \-\-add" .
 .TP
 .B workflow.versionFile
-File that holds the project's version. When it exists,
+File that holds the project's version, a path inside the repository. When
+it exists,
 .BR "git workflow branch pre" ,
 .B release
 and
 .B finish
-check that it matches the version being tagged ("v1.2.3" or "1.2.3").
+check that it matches the version being tagged, with or without a "v",
+and
+.B start
+offers to set it on a new release or hotfix branch. Its name says how to
+read it:
+.I package.json
+(the top-level
+.BR version ),
+.I Cargo.toml
+.RB ( [package] ,
+else
+.BR [workspace.package] ),
+.I pyproject.toml
+.RB ( [project] ,
+else
+.BR [tool.poetry] );
+any other file holds just the version. One with no version of its own
+(a dynamic version) is skipped.
 Default:
 .BR VERSION .
 An empty value disables the check.
+.TP
+.B workflow.tagPrefix
+What comes before
+.I X.Y.Z
+in tags and in versioned branch names. Default:
+.BR v .
+Empty for
+.IR 1.2.3 ;
+a path for one package of a monorepo:
+.B pkg\-a/v
+tags
+.I pkg\-a/v1.2.3
+from
+.IR release/pkg\-a/v1.2.3 .
 .PP
 Each branch type has these, as
 .BR workflow.<type>.<key> :

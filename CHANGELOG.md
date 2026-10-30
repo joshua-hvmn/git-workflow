@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Versions beyond `vX.Y.Z` and `VERSION`.** `workflow.tagPrefix` (default `v`) is what comes
+  before `X.Y.Z` in tags and branch names: `""` for `1.2.3`, `pkg-a/v` for one package of a
+  monorepo. `workflow.versionFile` reads `package.json`, `Cargo.toml` (`[package]`, else
+  `[workspace.package]`) and `pyproject.toml` (`[project]`, else `[tool.poetry]`) by name, with
+  awk: nothing to install, and nothing in the file runs.
+- **`git b start release minor`** (`major`, `patch`) starts the next version after the latest
+  release, and a version typed without its `v` gets one. On a new release or hotfix branch,
+  `start` offers to set the version file and commit it, keeping how the file writes it.
 - **`-y`** for `start`, `pre`, `release` and `finish`: answer their questions with yes, so they
   can run from a script. Flow warnings still ask (or abort without a terminal, or in strict
   mode).
@@ -12,6 +20,8 @@
 
 - `git b delete`'s 1.x spellings of `-y` (`-d`, `--d`, `--delete`, `--y`, and `y`, `yes` or `d`
   after the branch name) warn that they go away in v4. `-d` read as `git branch -d`.
+- `workflow.versionFile` must be a path inside the repository, since `start` can write to it
+  and a `.gitworkflow` can set it.
 - `make test`, `make check` and `make installcheck` run the suite in parallel, `JOBS` tests at a
   time (three per CPU), when GNU parallel is installed; `JOBS=1` runs it in order. Each test
   copies a fixture built once per file instead of building its own, which halves what a test
