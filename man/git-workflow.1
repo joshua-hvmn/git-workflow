@@ -482,6 +482,16 @@ and the aliases that run it. Git's own completion loads it the first time
 it completes a
 .B git workflow
 command.
+.TP
+.I <prefix>/share/zsh/site\-functions/_git\-workflow
+zsh completion. zsh's git completion finds it on
+.BR $fpath ,
+and expands aliases before calling it.
+.TP
+.I <prefix>/share/fish/vendor_conf.d/git\-workflow.fish
+fish completion, which fish loads at startup: completions for
+.B git
+itself, so aliases complete too.
 .SH SEE ALSO
 .BR git\-workflow\-branch (1),
 .BR git\-workflow\-commit (1),

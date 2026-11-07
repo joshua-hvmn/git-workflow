@@ -1,0 +1,138 @@
+#compdef git-workflow
+#description branches, prereleases and releases, following the flow
+#
+# zsh completion for `git workflow`, and for the aliases that run it (`git b`,
+# ...): zsh's own git completion expands an alias before it calls this, and
+# lists git-workflow among git's commands with the description above.
+#
+# Nothing to set up: `make install` puts this file in zsh's site-functions,
+# which is on $fpath. From a checkout, add its directory to $fpath before
+# compinit runs: fpath=(~/src/git-workflow/completion $fpath)
+
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Joshua Haveman
+
+local cmd sub expl
+local -a cmds subs types names
+
+# words[1] is "workflow" (through git) or "git-workflow"
+cmds=(
+    'branch:start, finish, prerelease and release branches'
+    'commit:commit with the message as plain words'
+    'quick-commit:commit, sync with the remote branch, optionally push'
+    'push:sync with the remote branch, then push'
+    'sync:fetch everything, then bring a branch up to date'
+    'pull:switch to a branch and bring it up to date'
+    'squash:squash the current branch'\''s own commits'
+    'aliases:set up, list or remove your aliases'
+    'help:a command'\''s manual page'
+    'version:the installed version'
+)
+if (( CURRENT == 2 )); then
+    _describe -t commands 'git workflow command' cmds
+    return
+fi
+
+cmd=$words[2]
+case $cmd in
+b) cmd=branch ;;
+c) cmd=commit ;;
+qc) cmd=quick-commit ;;
+ps) cmd=push ;;
+sq) cmd=squash ;;
+rb-pull) cmd=pull ;;
+esac
+
+# Local branches; with "remote", the ones only on a remote too
+_git_workflow_branches() {
+    names=(${(f)"$(_call_program branches git for-each-ref --format='%\(refname:short\)' refs/heads 2>/dev/null)"})
+    if [[ $1 == remote ]]; then
+        names+=(${${(f)"$(_call_program branches git for-each-ref --format='%\(refname:lstrip=3\)' refs/remotes 2>/dev/null)"}:#HEAD})
+    fi
+    names=(${(u)names})
+    _wanted branches expl branch compadd -a names
+}
+
+case $cmd in
+branch)
+    if (( CURRENT == 3 )); then
+        subs=(
+            'start:start a branch of one of the flow'\''s types'
+            'pre:tag the branch as a prerelease and push it'
+            'prerelease:tag the branch as a prerelease and push it'
+            'release:tag the newest prerelease'\''s commit as the release'
+            'finish:integrate per the flow: merge, or open a pull request'
+            'delete:delete a branch locally and on the remote'
+            'status:where you are in the flow and what'\''s next'
+            'config:the flow and its settings'
+            'help:usage'
+            'version:the installed version'
+        )
+        _describe -t subcommands 'git workflow branch subcommand' subs
+        return
+    fi
+    sub=$words[3]
+    case $sub in
+    start)
+        if [[ $PREFIX == -* ]]; then
+            compadd -- --yes
+        elif (( CURRENT == 4 )); then
+            types=(${(f)"$(_call_program types git workflow branch config --types 2>/dev/null)"})
+            _wanted types expl 'branch type' compadd -a types
+        elif (( CURRENT == 5 )); then
+            types=(${(f)"$(_call_program types git workflow branch config --versioned-types 2>/dev/null)"})
+            if (( ${types[(Ie)$words[4]]} )); then
+                _wanted versions expl 'next version' compadd major minor patch
+            fi
+        fi
+        ;;
+    finish)
+        if [[ $PREFIX == -* ]]; then
+            compadd -- --yes
+        else
+            _git_workflow_branches
+        fi
+        ;;
+    delete)
+        if [[ $PREFIX == -* ]]; then
+            compadd -- -y -f
+        else
+            _git_workflow_branches
+        fi
+        ;;
+    pre | prerelease)
+        [[ $PREFIX == -* ]] && compadd -- --dry-run --list --yes
+        ;;
+    release)
+        [[ $PREFIX == -* ]] && compadd -- --dry-run --yes
+        ;;
+    status)
+        [[ $PREFIX == -* ]] && compadd -- --no-fetch
+        ;;
+    esac
+    ;;
+commit)
+    (( CURRENT == 3 )) && [[ $PREFIX == -* ]] && compadd -- --amend
+    ;;
+quick-commit)
+    (( CURRENT == 3 )) && [[ $PREFIX == -* ]] && compadd -- --push
+    ;;
+push)
+    (( CURRENT == 3 )) && compadd force
+    ;;
+pull | sync | squash)
+    (( CURRENT == 3 )) && _git_workflow_branches remote
+    ;;
+aliases)
+    if (( CURRENT == 3 )); then
+        compadd list install reset remove help
+    else
+        case $words[3] in
+        install | reset | remove) compadd commands extras ;;
+        esac
+    fi
+    ;;
+help)
+    (( CURRENT == 3 )) && compadd branch commit quick-commit push sync pull squash aliases
+    ;;
+esac
