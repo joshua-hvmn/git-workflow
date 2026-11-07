@@ -208,7 +208,8 @@ install: all ## Install the program, its libraries and commands, completion, the
 	$(Q)$(MKDIR_P) "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/commands" \
 		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DATADIR)/flows" "$(DESTDIR)$(DATADIR)/forges" \
 		"$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(COMPLETIONDIR)" \
-		"$(DESTDIR)$(ZSHCOMPDIR)" "$(DESTDIR)$(FISHCONFDIR)"	$(Q)$(call install_files,$(DATADIR),$(INSTALL_DATA),$(LIBS))
+		"$(DESTDIR)$(ZSHCOMPDIR)" "$(DESTDIR)$(FISHCONFDIR)"
+	$(Q)$(call install_files,$(DATADIR),$(INSTALL_DATA),$(LIBS))
 	$(Q)$(call install_files,$(DATADIR)/commands,$(INSTALL_DATA),$(COMMANDS))
 	$(Q)$(call install_files,$(DATADIR)/aliases,$(INSTALL_DATA),$(ALIASES))
 	$(Q)$(call install_files,$(DATADIR)/flows,$(INSTALL_DATA),$(FLOWS))

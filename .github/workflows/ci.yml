@@ -37,7 +37,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # zsh and fish for their completion tests, jq for the GitLab forge's\
+      # zsh and fish for their completion tests, jq for the GitLab forge's
       - name: Install bats, GNU parallel, zsh, fish, and jq (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends bats parallel zsh fish jq
