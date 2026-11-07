@@ -4,6 +4,11 @@
 
 ### Added
 
+- **`git b status`**: the flow and the latest release; the current branch, its commits, its
+  prereleases (and the commits after the last one), its pull request, and the command to run
+  next; the open branches of each type; and what's left to do: a release merged but never
+  tagged (`finish` wasn't run again after its pull request merged), a merged topic still around,
+  a prerelease of `main` never released. `--no-fetch` skips the fetch.
 - **Versions beyond `vX.Y.Z` and `VERSION`.** `workflow.tagPrefix` (default `v`) is what comes
   before `X.Y.Z` in tags and branch names: `""` for `1.2.3`, `pkg-a/v` for one package of a
   monorepo. `workflow.versionFile` reads `package.json`, `Cargo.toml` (`[package]`, else

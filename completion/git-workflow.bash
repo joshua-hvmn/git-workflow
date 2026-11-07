@@ -58,7 +58,7 @@ _git_workflow() {
         if [ "$n" -eq 1 ]; then
             case "$cur" in
             -*) _git_branch ;; # options go to git branch
-            *) __gitcomp "start pre prerelease release finish delete config help version" ;;
+            *) __gitcomp "start pre prerelease release finish delete status config help version" ;;
             esac
             return
         fi
@@ -102,6 +102,11 @@ _git_workflow() {
         release)
             case "$cur" in
             -*) __gitcomp "--dry-run --yes" ;;
+            esac
+            ;;
+        status)
+            case "$cur" in
+            -*) __gitcomp "--no-fetch" ;;
             esac
             ;;
         esac
