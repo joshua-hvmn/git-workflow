@@ -231,10 +231,25 @@ when there is one, else
 .BR workflow.remote .
 .TP
 .B workflow.forge
-What opens pull requests. Default:
+What opens pull requests:
 .BR github ,
 through
-.BR gh (1).
+.BR gh (1),
+or
+.BR gitlab ,
+through
+.BR glab (1)
+and
+.BR jq (1),
+or one of yours (see
+.BR FILES ).
+Default:
+.B gitlab
+when the upstream remote's URL says gitlab, else
+.BR github .
+Set it to
+.B github
+for a GitHub Enterprise host, so release runs link to its Actions.
 .TP
 .B workflow.prereleaseLabel
 Default label for
@@ -402,10 +417,11 @@ and finishing (or deleting the current branch) with uncommitted changes.
 When set, messages are not colored.
 .TP
 .B XDG_CONFIG_HOME
-Where your alias sets and flows go: its
-.I git\-workflow/aliases/
-and
+Where your alias sets, flows and forges go: its
+.IR git\-workflow/aliases/ ,
 .I git\-workflow/flows/
+and
+.I git\-workflow/forges/
 directories. Default:
 .IR ~/.config .
 .SH FILES
@@ -434,11 +450,26 @@ The flows that ship:
 and
 .BR github .
 .TP
+.I ~/.config/git\-workflow/forges/
+Your forges,
+.IR <name>.sh ,
+each picked with
+.BR "workflow.forge <name>" .
+A forge defines the functions
+.I share/git\-workflow/forges/github.sh
+describes.
+.TP
 .I <prefix>/share/git\-workflow/forges/
 What opens pull requests:
 .I github.sh
 uses
-.BR gh (1).
+.BR gh (1),
+and
+.I gitlab.sh
+uses
+.BR glab (1)
+and
+.BR jq (1).
 .TP
 .I .gitworkflow
 In a repository: its flow and settings, for everyone who works on it.

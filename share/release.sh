@@ -379,13 +379,13 @@ offer_version_commit() {
     fi
 }
 
-# GitHub Actions URL of the repository the tags go to, if it's on GitHub
-actions_url() {
-    local slug
-    slug=$(remote_slug "$UPSTREAM")
-    case "$slug" in
-    github.com/*) printf 'https://%s/actions' "$slug" ;;
-    esac
+# Where to watch the release run, if the forge knows: its CI page for the
+# repository the tags go to, and a command ("https://.../actions  (or: gh
+# run watch)"). forge_ci_hint is optional for a forge.
+ci_hint() {
+    forge_source 2>/dev/null || return 0
+    declare -F forge_ci_hint >/dev/null || return 0
+    forge_ci_hint || :
 }
 
 # Push local commits so the tagged commit also lives on the remote branch.
@@ -636,8 +636,8 @@ prerelease_branch() {
     tag_and_push "$tag" HEAD "prerelease: $tag" || return 1
 
     note "Pushed prerelease '$tag'."
-    url=$(actions_url)
-    [ -n "$url" ] && note "Watch the release run: $url  (or: gh run watch)"
+    url=$(ci_hint)
+    [ -n "$url" ] && note "Watch the release run: $url"
     if [ -n "$on_main" ]; then
         info "Once it's tested: $(wf_cmd branch release "$base")"
     fi
@@ -777,7 +777,7 @@ release_main() {
     tag_and_push "$version" "$target" "release: $version" || return 1
 
     note "Released '$version'."
-    url=$(actions_url)
-    [ -n "$url" ] && note "Watch the release run: $url  (or: gh run watch)"
+    url=$(ci_hint)
+    [ -n "$url" ] && note "Watch the release run: $url"
     return 0
 }

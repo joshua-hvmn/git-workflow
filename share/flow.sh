@@ -366,8 +366,8 @@ finish_merge() {
 
     if [ -n "$version" ]; then
         note "Released '$version'."
-        url=$(actions_url)
-        [ -n "$url" ] && note "Watch the release run: $url  (or: gh run watch)"
+        url=$(ci_hint)
+        [ -n "$url" ] && note "Watch the release run: $url"
     fi
     delete_branch "$branch" || note "Kept branch '$branch'."
 }
@@ -376,16 +376,6 @@ finish_merge() {
 # finish, with integrate=pr: open a pull request; run finish again once it's
 # merged, and it tags (versioned types) and cleans up
 # ---------------------------------------------------------------------------
-
-# Load the forge (workflow.forge) the first time it's needed
-forge_load() {
-    if [ -z "${__WF_FORGE_LOADED:-}" ]; then
-        # shellcheck source=/dev/null # each forge is checked on its own
-        . "$GIT_WORKFLOW_DATADIR/forges/$FORGE.sh" || return 1
-        __WF_FORGE_LOADED=1
-    fi
-    forge_require
-}
 
 # True when <ref>'s changes are already on <into> as different commits: a
 # pull request merged by rebase (each commit has an equivalent) or by squash
@@ -520,8 +510,8 @@ finish_pr() {
         }
         tag_and_push "$version" "$target" "$type: $version" || return 1
         note "Released '$version'."
-        url_actions=$(actions_url)
-        [ -n "$url_actions" ] && note "Watch the release run: $url_actions  (or: gh run watch)"
+        url_actions=$(ci_hint)
+        [ -n "$url_actions" ] && note "Watch the release run: $url_actions"
 
         # Back-merge through a pull request too
         if [ -n "$back" ] && remote_branch_exists "$back" &&
@@ -795,7 +785,7 @@ git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
   releaseFromMain  $RELEASE_FROM_MAIN$(__cfg_src releasefrommain)
   remote           $REMOTE$(__cfg_src remote)
   upstream         $UPSTREAM$(__cfg_src upstream)
-  forge            $FORGE$(__cfg_src forge)
+  forge            $FORGE${FORGE_WHY:+  ($FORGE_WHY)}
   prereleaseLabel  $PRERELEASE_LABEL$(__cfg_src prereleaselabel)
   strict           $STRICT$(__cfg_src strict)
   versionFile      ${VERSION_FILE:-(disabled)}$(__cfg_src versionfile)

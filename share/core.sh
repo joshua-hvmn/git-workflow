@@ -120,7 +120,9 @@ wf_version() {
 #   workflow.releaseFromMain   true: `pre` and `release` tag main directly
 #   workflow.remote            where your branches go (your fork, if you use one)
 #   workflow.upstream          where mainBranch, devBranch and the tags live
-#   workflow.forge             what opens pull requests (default: github, through gh)
+#   workflow.forge             what opens pull requests: github (gh) or gitlab (glab),
+#                              or ~/.config/git-workflow/forges/<name>.sh (default:
+#                              gitlab when the upstream remote's URL says gitlab, else github)
 #   workflow.prereleaseLabel   default label for `pre` (rc)
 #   workflow.strict            true: flow violations abort instead of asking
 #   workflow.versionFile       must match the version being tagged; "" disables.
@@ -298,6 +300,8 @@ __wf_read_file() {
 # aliases are collected on the way
 __L_GLOBAL='' __L_REPO='' __L_LOCAL='' __L_COMMAND='' __L_FLOW='' __L_DETECTED=''
 __has_upstream=''
+# "<remote> <url>" lines, for __wf_remote_url
+__WF_REMOTE_URLS=''
 while IFS=$'\t' read -r __scope __rest; do
     __key="${__rest%% *}"
     __value=''
@@ -307,8 +311,11 @@ while IFS=$'\t' read -r __scope __rest; do
         __wf_note_alias "${__key#alias.}" "$__value"
         continue
         ;;
-    remote.upstream.url)
-        __has_upstream=1
+    remote.*.url)
+        __n="${__key#remote.}"
+        __n="${__n%.url}"
+        __WF_REMOTE_URLS="$__WF_REMOTE_URLS$__n $__value$__NL"
+        [ "$__n" = upstream ] && __has_upstream=1
         continue
         ;;
     esac
@@ -317,8 +324,16 @@ while IFS=$'\t' read -r __scope __rest; do
     command) __wf_add_line __L_COMMAND "git -c" "$__key" "$__value" "$__WF_GIT_KEYS" ;;
     *) __wf_add_line __L_GLOBAL "global git config" "$__key" "$__value" "$__WF_GIT_KEYS" ;;
     esac
-done < <(git config --show-scope --get-regexp '^(workflow|alias)\.|^remote\.upstream\.url$' 2>/dev/null || true)
-unset __scope __rest __key __value
+done < <(git config --show-scope --get-regexp '^(workflow|alias)\.|^remote\..*\.url$' 2>/dev/null || true)
+unset __scope __rest __key __value __n
+
+# __wf_remote_url <remote>: its configured URL (from the call above)
+__wf_remote_url() {
+    local all="$__NL$__WF_REMOTE_URLS" after
+    after="${all##*"$__NL$1 "}"
+    [ "$after" != "$all" ] || return 1
+    printf '%s' "${after%%"$__NL"*}"
+}
 
 # Layer 5: the repository's .gitworkflow
 WF_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null) || WF_TOPLEVEL=''
@@ -531,16 +546,41 @@ fi
 # How a version looks, for messages: vX.Y.Z, and an example, v1.2.3
 VFMT="${TAG_PREFIX}X.Y.Z" VEX="${TAG_PREFIX}1.2.3"
 
-FORGE=github
+# __wf_forge_file <name>: the forge's file, yours first, then the ones that ship
+__wf_forge_file() {
+    local f
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/git-workflow/forges/$1.sh" \
+        "$GIT_WORKFLOW_DATADIR/forges/$1.sh"; do
+        if [ -f "$f" ]; then
+            printf '%s' "$f"
+            return 0
+        fi
+    done
+    return 1
+}
+# FORGE_WHY: where the forge came from, for `config` (empty: the default)
+FORGE=github FORGE_WHY=''
 if conf_get forge; then
     if ! __wf_name_ok "$CONF_VAL"; then
         __wf_problem "workflow.forge ($CONF_SRC) '$CONF_VAL' is not a forge name; using github."
-    elif [ -f "$GIT_WORKFLOW_DATADIR/forges/$CONF_VAL.sh" ]; then
-        FORGE="$CONF_VAL"
+    elif __wf_forge_file "$CONF_VAL" >/dev/null; then
+        FORGE="$CONF_VAL" FORGE_WHY="$CONF_SRC"
     else
-        __wf_problem "workflow.forge ($CONF_SRC): git-workflow has no forge '$CONF_VAL'; using github."
+        __wf_problem "workflow.forge ($CONF_SRC): there's no forge '$CONF_VAL' (~/.config/git-workflow/forges/$CONF_VAL.sh, or one that ships); using github."
     fi
+else
+    # The upstream remote's host: https://user@host:port/path, or user@host:path
+    __host=$(__wf_remote_url "$UPSTREAM") || __host=''
+    __host="${__host#*://}"
+    __host="${__host%%/*}"
+    __host="${__host##*@}"
+    __host="${__host%%:*}"
+    case "$__host" in
+    *gitlab*) FORGE=gitlab FORGE_WHY="guessed: '$UPSTREAM' is on GitLab" ;;
+    esac
+    unset __host
 fi
+FORGE_FILE=$(__wf_forge_file "$FORGE") || FORGE_FILE="$GIT_WORKFLOW_DATADIR/forges/github.sh"
 
 __wf_bool STRICT strict false
 __wf_bool RELEASE_FROM_MAIN releasefrommain false
@@ -849,10 +889,10 @@ remote_ref() {
 }
 
 # host/owner/repo of a GitHub-style remote, from its configured URL
-# (github.com/joshua-hvmn/git-workflow); empty otherwise
+# (github.com/joshua-hvmn/git-workflow, gitlab.com/group/sub/repo); empty otherwise
 remote_slug() {
     local url host
-    url=$(git config --get "remote.$1.url") || return 0
+    url=$(__wf_remote_url "$1") || return 0
     url="${url%/}"
     url="${url%.git}"
     case "$url" in
@@ -998,6 +1038,19 @@ sync_remote() {
         git fetch --quiet --prune --no-tags "$REMOTE" ||
             warn "could not fetch from '$REMOTE'; using the last known remote state."
     fi
+}
+
+# The forge (workflow.forge): loaded the first time it's needed. forge_load
+# also checks it can work here (its CLI is installed).
+forge_source() {
+    if [ -z "${__WF_FORGE_LOADED:-}" ]; then
+        # shellcheck source=/dev/null # each forge is checked on its own
+        . "$FORGE_FILE" || return 1
+        __WF_FORGE_LOADED=1
+    fi
+}
+forge_load() {
+    forge_source && forge_require
 }
 
 # Answered locally from refs/remotes/<remote>/*; call sync_remote first for fresh data.
