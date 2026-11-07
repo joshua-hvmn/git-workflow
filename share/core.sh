@@ -580,6 +580,7 @@ else
     esac
     unset __host
 fi
+FORGE_FILE=$(__wf_forge_file "$FORGE") || FORGE_FILE="$GIT_WORKFLOW_DATADIR/forges/github.sh"
 
 __wf_bool STRICT strict false
 __wf_bool RELEASE_FROM_MAIN releasefrommain false
@@ -888,7 +889,7 @@ remote_ref() {
 }
 
 # host/owner/repo of a GitHub-style remote, from its configured URL
-# (github.com/joshua-hvmn/git-workflow), gitlab.com/group/sub/repo; empty otherwise
+# (github.com/joshua-hvmn/git-workflow, gitlab.com/group/sub/repo); empty otherwise
 remote_slug() {
     local url host
     url=$(__wf_remote_url "$1") || return 0

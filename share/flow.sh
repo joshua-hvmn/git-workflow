@@ -785,7 +785,7 @@ git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
   releaseFromMain  $RELEASE_FROM_MAIN$(__cfg_src releasefrommain)
   remote           $REMOTE$(__cfg_src remote)
   upstream         $UPSTREAM$(__cfg_src upstream)
-  forge            $FORGE${FORGE_WHY:+  ($FORGE_WHY)} 
+  forge            $FORGE${FORGE_WHY:+  ($FORGE_WHY)}
   prereleaseLabel  $PRERELEASE_LABEL$(__cfg_src prereleaselabel)
   strict           $STRICT$(__cfg_src strict)
   versionFile      ${VERSION_FILE:-(disabled)}$(__cfg_src versionfile)
