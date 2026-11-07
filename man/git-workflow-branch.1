@@ -1,6 +1,7 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-10-29 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-11-06 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow-branch \- start, prerelease, release, finish and delete branches following the flow
+git-workflow-branch \- start, prerelease, release, finish, delete and show
+branches following the flow
 .SH SYNOPSIS
 .B git workflow branch
 .RI [ git-branch-options ]
@@ -29,6 +30,9 @@ git-workflow-branch \- start, prerelease, release, finish and delete branches fo
 .RI [ branch ]
 .RB [ \-y ]
 .RB [ \-f ]
+.br
+.B git workflow branch status
+.RB [ \-\-no\-fetch ]
 .br
 .B git workflow branch config
 .RB [ \-\-types | \-\-versioned\-types ]
@@ -241,6 +245,18 @@ or
 .B d
 after the branch name) still work, with a warning, until v4.
 .TP
+.B status \fR[\fB\-\-no\-fetch\fR]
+Show the flow and the latest release; the current branch, its commits of
+its own and unpushed ones, its prereleases and the commits after the last
+one, its pull request, and the command to run next; the open branches of
+each type; and what's left to do: a release or hotfix branch merged into
+the main branch but never tagged (finish wasn't run again after its pull
+request merged), a merged topic branch still around, a prerelease of the
+main branch never released. It fetches first, unless
+.BR \-\-no\-fetch ,
+and asks the forge only about the current branch, and only when git
+can't see it merged.
+.TP
 .B config \fR[\fB\-\-types\fR | \fB\-\-versioned\-types\fR]
 Show the flow, why it's the flow, every setting with where it came from,
 and the branch types.
@@ -258,6 +274,7 @@ git workflow branch pre              # v1.2.0\-rc.1, pushed; CI publishes a prer
 git workflow branch pre              # v1.2.0\-rc.2
 git workflow branch finish           # pull request into main; once it's merged,
 git workflow branch finish           # v1.2.0 tagged, back-merge pull request into next
+git workflow branch status           # what's open, and what's left to do
 
 # GitHub flow
 git workflow branch start topic fix

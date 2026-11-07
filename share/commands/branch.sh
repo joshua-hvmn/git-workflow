@@ -13,6 +13,7 @@
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 . "$GIT_WORKFLOW_DATADIR/release.sh"
 . "$GIT_WORKFLOW_DATADIR/flow.sh"
+. "$GIT_WORKFLOW_DATADIR/status.sh"
 
 branch_usage() {
     local b
@@ -25,6 +26,7 @@ usage: $b [<subcommand>] [args]
   release [$VFMT] [-n]                 tag the newest prerelease's commit $VFMT (flows that release from main)
   finish [branch]                       integrate per the flow (merge, or pull request), tag, push
   delete [branch] [-y] [-f]             delete a branch locally and on the remote (-f: even if unmerged)
+  status [--no-fetch]                   where you are in the flow, what's next, and what's left to do
   config                                show the flow and effective settings
   help                                  this message
   version                               show the git-workflow version
@@ -55,6 +57,9 @@ prerelease | pre)
     ;;
 release)
     release_main "$@"
+    ;;
+status)
+    show_status "$@"
     ;;
 config)
     show_config "$@"

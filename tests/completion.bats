@@ -60,6 +60,8 @@ require_git_completion() {
     [[ "$output" == *$'branch\n'* ]]
     [[ "$output" == *"quick-commit"* ]]
     run complete "git workflow branch st"
+    [ "$output" = $'start\nstatus' ]
+    run complete "git workflow branch star"
     [ "$output" = "start" ]
     run complete "git workflow branch start "
     [ "$output" = $'topic\nrelease\nhotfix' ]
