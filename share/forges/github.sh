@@ -17,9 +17,14 @@
 #                                     open one into <base>; an empty title fills the
 #                                     title and body from the commits
 #
+# and, if it can, one more:
+#
+#   forge_ci_hint                     where to watch a release run: a URL, and a
+#                                     command ("<url>  (or: gh run watch)")
+#
 # Pull requests always go to UPSTREAM's repository. A branch on another remote
-# (your fork) is <fork owner>:<branch> there. Another forge (GitLab's glab, say)
-# is another file with these six functions.
+# (your fork) is <fork owner>:<branch> there. Another forge is another file
+# with these functions, in share/forges/ or ~/.config/git-workflow/forges/.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -84,6 +89,19 @@ forge_pr_head() {
     gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state merged --limit 30 \
         --json headRefOid,headRepositoryOwner \
         --jq "$(__gh_pick "$2") | if . == null then empty else .headRefOid end"
+}
+
+# GitHub Actions for the repository the tags go to: github.com, or a GitHub
+# Enterprise host when workflow.forge says it's GitHub
+forge_ci_hint() {
+    local slug
+    slug=$(remote_slug "$UPSTREAM")
+    case "$slug" in
+    '') return 0 ;;
+    github.com/*) ;;
+    *) [ -n "$FORGE_WHY" ] || return 0 ;;
+    esac
+    printf 'https://%s/actions  (or: gh run watch)' "$slug"
 }
 
 forge_pr_create() {

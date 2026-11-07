@@ -15,6 +15,12 @@
 - **`-y`** for `start`, `pre`, `release` and `finish`: answer their questions with yes, so they
   can run from a script. Flow warnings still ask (or abort without a terminal, or in strict
   mode).
+- **A GitLab forge** (`share/forges/gitlab.sh`, with `glab` and `jq`), used unless
+  `workflow.forge` says otherwise when the upstream remote's URL says gitlab. Merge requests
+  from a fork name it as their head project.
+- Forges of your own in `~/.config/git-workflow/forges/<name>.sh`, like flows. A forge can say
+  where to watch the release run (`forge_ci_hint`): GitHub Actions, now on GitHub Enterprise
+  hosts too once `workflow.forge` is `github`, and GitLab pipelines.
 
 ### Changed
 
