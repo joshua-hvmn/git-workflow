@@ -326,7 +326,7 @@ lint: ## Shellcheck the code and tests, check their formatting (shfmt), check th
 test: ## Run the bats suite against this checkout, JOBS tests at a time
 	@$(say) TEST "tests$(if $(BATS_JOBS), ($(JOBS) at a time))"
 	$(Q)$(bats_note)
-	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null
+	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) --print-output-on-failure tests </dev/null
 
 check: test ## Same as test (the name packaging tools run)
 
@@ -338,7 +338,7 @@ installcheck: ## Install into a temporary PREFIX, test that copy, then check uni
 	$(MAKE) --no-print-directory install PREFIX="$$prefix" >/dev/null && \
 	$(say) TEST "$$prefix/bin$(if $(BATS_JOBS), ($(JOBS) at a time))" && \
 	$(bats_note) && \
-	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null && \
+	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) --print-output-on-failure tests </dev/null && \
 	$(say) UNINST "$$prefix" && \
 	$(MAKE) --no-print-directory uninstall PREFIX="$$prefix" >/dev/null && \
 	left=$$(find "$$prefix" -type f -o -type l -o -name "*$(NAME)*") && \
