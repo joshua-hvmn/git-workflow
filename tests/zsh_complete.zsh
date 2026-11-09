@@ -34,7 +34,8 @@ wait_for() {
     exit 1
 }
 
-rm -f "$matches" "$matches".{ready,done}zpty z zsh -f -i
+rm -f "$matches" "$matches".{ready,done}
+zpty z zsh -f -i
 zpty -w z "PS1=''; unsetopt auto_list beep; fpath=(${(q)dir} \$fpath); autoload -Uz compinit; compinit -u -C -d ${(q)dump}"
 zpty -w z "_record() { compadd() { builtin compadd -O __m \"\$@\"; print -rl -- \"\${^__m[@]}\" >>| ${(q)matches}; builtin compadd \"\$@\"; }; _main_complete; unfunction compadd; : >| ${(q)matches}.done; }"
 # The key is ^G, which no terminal takes for itself (macOS's takes ^T for its
