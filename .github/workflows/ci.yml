@@ -15,8 +15,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install shellcheck, shfmt, and mandoc
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck shfmt mandoc
+      - name: Install shellcheck, shfmt, and mandoc, zsh, and fish
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck shfmt mandoc zsh fish
       - name: Lint
         run: make lint
 
@@ -37,9 +37,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install bats and GNU parallel (Linux)
+      # zsh and fish for their completion tests, jq for the GitLab forge's
+      - name: Install bats, GNU parallel, zsh, fish, and jq (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends bats parallel
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends bats parallel zsh fish jq
 
       # Without auto-update, brew installs from the index the runner image came
       # with, instead of spending most of this step refreshing it. Without

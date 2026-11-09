@@ -48,6 +48,8 @@ DATADIR		?= $(PREFIX)/share/$(NAME)
 DOCDIR		?= $(PREFIX)/share/doc/$(NAME)
 MANDIR		?= $(PREFIX)/share/man
 COMPLETIONDIR   ?= $(PREFIX)/share/bash-completion/completions
+ZSHCOMPDIR      ?= $(PREFIX)/share/zsh/site-functions
+FISHCONFDIR     ?= $(PREFIX)/share/fish/vendor_conf.d
 LINKDIR		?= $(HOME)/.local/bin
 
 # Alias sets for `make aliases` / `make unaliases` (empty: install/uninstall defaults)
@@ -70,6 +72,8 @@ FORGES		:= $(wildcard share/forges/*.sh)
 MAN1		:= $(wildcard man/*.1)
 DOCS		:= README.md CHANGELOG.md LICENSE
 COMPLETION	:= completion/$(NAME).bash
+ZSH_COMPLETION	:= completion/_$(NAME)
+FISH_COMPLETION	:= completion/$(NAME).fish
 SHFMT_FLAGS	:= -i 4
 SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh share/forges/*.sh) $(COMPLETION) tests/test_helper.bash
 
@@ -91,7 +95,7 @@ DIST_NAME ?= $(NAME)-$(VERSION)
 
 # Only bash expands the ~ in PREFIX=~/.local. fish, zsh and sh pass it through,
 # and the recipes would then create a directory literally named "~" in this one.
-ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(COMPLETIONDIR)$(LINKDIR)),)
+ifneq ($(findstring ~,$(DESTDIR)$(PREFIX)$(BINDIR)$(DATADIR)$(DOCDIR)$(MANDIR)$(COMPLETIONDIR)$(ZSHCOMPDIR)$(FISHCONFDIR)$(LINKDIR)),)
   $(error A path contains a "~" that your shell did not expand. Use $$HOME instead: PREFIX="$$HOME/.local")
 endif
 
@@ -192,17 +196,19 @@ help:
 		PREFIX  '$(PREFIX)'  DESTDIR '$(or $(DESTDIR),(none))' \
 		BINDIR  '$(BINDIR)'  DATADIR '$(DATADIR)' \
 		DOCDIR  '$(DOCDIR)'  MANDIR  '$(MANDIR)' \
-		COMPLETIONDIR '$(COMPLETIONDIR)' \
+		COMPLETIONDIR '$(COMPLETIONDIR)' ZSHCOMPDIR '$(ZSHCOMPDIR)' \
+		FISHCONFDIR '$(FISHCONFDIR)' \
 		LINKDIR '$(LINKDIR)' SETS    '$(or $(SETS),(defaults))' \
 		JOBS    '$(JOBS)$(if $(BATS_JOBS),, (GNU parallel not installed: one at a time))'
 
 ##@ Install
 
-install: all ## Install the program, its libraries and commands, the man pages and docs
+install: all ## Install the program, its libraries and commands, completion, the man pages and docs
 	$(Q)$(remove_1x)
 	$(Q)$(MKDIR_P) "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/commands" \
 		"$(DESTDIR)$(DATADIR)/aliases" "$(DESTDIR)$(DATADIR)/flows" "$(DESTDIR)$(DATADIR)/forges" \
-		"$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(COMPLETIONDIR)"
+		"$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(MANDIR)/man1" "$(DESTDIR)$(COMPLETIONDIR)" \
+		"$(DESTDIR)$(ZSHCOMPDIR)" "$(DESTDIR)$(FISHCONFDIR)"
 	$(Q)$(call install_files,$(DATADIR),$(INSTALL_DATA),$(LIBS))
 	$(Q)$(call install_files,$(DATADIR)/commands,$(INSTALL_DATA),$(COMMANDS))
 	$(Q)$(call install_files,$(DATADIR)/aliases,$(INSTALL_DATA),$(ALIASES))
@@ -212,6 +218,10 @@ install: all ## Install the program, its libraries and commands, the man pages a
 	$(Q)$(call install_files,$(MANDIR)/man1,$(INSTALL_DATA),$(MAN1))
 	@$(say) INSTALL "$(DESTDIR)$(COMPLETIONDIR)/$(NAME)"
 	$(Q)$(INSTALL_DATA) "$(COMPLETION)" "$(DESTDIR)$(COMPLETIONDIR)/$(NAME)"
+# zsh's git completion finds _git-workflow on $fpath; fish runs vendor_conf.d
+# snippets at startup (completion/git-workflow.fish says why it's one)
+	$(Q)$(call install_files,$(ZSHCOMPDIR),$(INSTALL_DATA),$(ZSH_COMPLETION))
+	$(Q)$(call install_files,$(FISHCONFDIR),$(INSTALL_DATA),$(FISH_COMPLETION))
 # The program last, so an interrupted install never leaves a program that
 # can't find the rest. Its empty GIT_WORKFLOW_DATADIR= line (a checkout leaves
 # it empty and looks in ../share) gets DATADIR. awk rather than sed: DATADIR
@@ -242,6 +252,8 @@ uninstall: ## Remove what install put in PREFIX, and anything 1.x left there
 	$(Q)$(call remove_files,$(DOCDIR),$(DOCS))
 	$(Q)$(call remove_files,$(MANDIR)/man1,$(notdir $(MAN1)))
 	$(Q)$(call remove_files,$(COMPLETIONDIR),$(NAME))
+	$(Q)$(call remove_files,$(ZSHCOMPDIR),$(notdir $(ZSH_COMPLETION)))
+	$(Q)$(call remove_files,$(FISHCONFDIR),$(notdir $(FISH_COMPLETION)))
 	$(Q)$(remove_1x)
 # Only this project's own directories, and only once they're empty
 	$(Q)$(call remove_dir,$(DATADIR)/commands); $(call remove_dir,$(DATADIR)/aliases); \
@@ -275,7 +287,7 @@ unlink: ## Remove that symlink (only if it points into this checkout)
 	fi
 	$(Q)$(unlink_1x)
 
-lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the man pages
+lint: ## Shellcheck the code and tests, check their formatting (shfmt), check the zsh and fish completion, lint the man pages
 	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)"
 	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)
 	@$(say) LINT "tests/*"
@@ -287,6 +299,19 @@ lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the
 		$(SHFMT) $(SHFMT_FLAGS) -ln bats -d tests/*.bats; \
 	else \
 		echo "note: $(SHFMT) is not installed, so formatting was not checked"; \
+	fi
+	$(Q)if command -v zsh >/dev/null 2>&1; then \
+		$(say) LINT "$(ZSH_COMPLETION)"; \
+		zsh -n "$(ZSH_COMPLETION)" tests/zsh_complete.zsh; \
+	else \
+		echo "note: zsh is not installed, so the zsh completion was not checked"; \
+	fi
+	$(Q)if command -v fish >/dev/null 2>&1; then \
+		$(say) LINT "$(FISH_COMPLETION)"; \
+		fish --no-execute "$(FISH_COMPLETION)" && \
+		if command -v fish_indent >/dev/null 2>&1; then fish_indent --check "$(FISH_COMPLETION)"; fi; \
+	else \
+		echo "note: fish is not installed, so the fish completion was not checked"; \
 	fi
 	$(Q)if command -v $(MANDOC) >/dev/null 2>&1; then \
 		$(say) LINT "man/*"; \
@@ -301,7 +326,7 @@ lint: ## Shellcheck the code and tests, check their formatting (shfmt), lint the
 test: ## Run the bats suite against this checkout, JOBS tests at a time
 	@$(say) TEST "tests$(if $(BATS_JOBS), ($(JOBS) at a time))"
 	$(Q)$(bats_note)
-	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null
+	$(Q)BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) --print-output-on-failure tests </dev/null
 
 check: test ## Same as test (the name packaging tools run)
 
@@ -313,7 +338,7 @@ installcheck: ## Install into a temporary PREFIX, test that copy, then check uni
 	$(MAKE) --no-print-directory install PREFIX="$$prefix" >/dev/null && \
 	$(say) TEST "$$prefix/bin$(if $(BATS_JOBS), ($(JOBS) at a time))" && \
 	$(bats_note) && \
-	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) tests </dev/null && \
+	GIT_WORKFLOW_BIN="$$prefix/bin" BATS_TEST_TIMEOUT=60 $(BATS) $(BATS_JOBS) --print-output-on-failure tests </dev/null && \
 	$(say) UNINST "$$prefix" && \
 	$(MAKE) --no-print-directory uninstall PREFIX="$$prefix" >/dev/null && \
 	left=$$(find "$$prefix" -type f -o -type l -o -name "*$(NAME)*") && \

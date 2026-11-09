@@ -26,6 +26,8 @@
 - Forges of your own in `~/.config/git-workflow/forges/<name>.sh`, like flows. A forge can say
   where to watch the release run (`forge_ci_hint`): GitHub Actions, now on GitHub Enterprise
   hosts too once `workflow.forge` is `github`, and GitLab pipelines.
+- **zsh and fish completion**, installed into `ZSHCOMPDIR` (zsh's `site-functions`) and
+  `FISHCONFDIR` (fish's `vendor_conf.d`), aliases included.
 
 ### Changed
 
