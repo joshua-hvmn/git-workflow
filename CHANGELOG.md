@@ -28,6 +28,8 @@
   hosts too once `workflow.forge` is `github`, and GitLab pipelines.
 - **zsh and fish completion**, installed into `ZSHCOMPDIR` (zsh's `site-functions`) and
   `FISHCONFDIR` (fish's `vendor_conf.d`), aliases included.
+- `docs/`: configuration, releasing, and the design notes; and `docs/demo.tape`, a recording
+  script for [vhs](https://github.com/charmbracelet/vhs).
 
 ### Changed
 
@@ -35,6 +37,8 @@
   after the branch name) warn that they go away in v4. `-d` read as `git branch -d`.
 - `workflow.versionFile` must be a path inside the repository, since `start` can write to it
   and a `.gitworkflow` can set it.
+- The README leads with what git-workflow is for and how it compares; the reference moved to
+  `docs/`.
 - `make test`, `make check` and `make installcheck` run the suite in parallel, `JOBS` tests at a
   time (three per CPU), when GNU parallel is installed; `JOBS=1` runs it in order. Each test
   copies a fixture built once per file instead of building its own, which halves what a test

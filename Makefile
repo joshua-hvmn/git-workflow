@@ -70,7 +70,7 @@ ALIASES		:= $(wildcard share/aliases/*)
 FLOWS		:= $(wildcard share/flows/*)
 FORGES		:= $(wildcard share/forges/*.sh)
 MAN1		:= $(wildcard man/*.1)
-DOCS		:= README.md CHANGELOG.md LICENSE
+DOCS		:= README.md CHANGELOG.md LICENSE $(wildcard docs/*.md)
 COMPLETION	:= completion/$(NAME).bash
 ZSH_COMPLETION	:= completion/_$(NAME)
 FISH_COMPLETION	:= completion/$(NAME).fish
@@ -249,7 +249,7 @@ uninstall: ## Remove what install put in PREFIX, and anything 1.x left there
 	$(Q)$(call remove_files,$(DATADIR)/aliases,$(notdir $(ALIASES)))
 	$(Q)$(call remove_files,$(DATADIR)/flows,$(notdir $(FLOWS)))
 	$(Q)$(call remove_files,$(DATADIR)/forges,$(notdir $(FORGES)))
-	$(Q)$(call remove_files,$(DOCDIR),$(DOCS))
+	$(Q)$(call remove_files,$(DOCDIR),$(notdir $(DOCS)))	
 	$(Q)$(call remove_files,$(MANDIR)/man1,$(notdir $(MAN1)))
 	$(Q)$(call remove_files,$(COMPLETIONDIR),$(NAME))
 	$(Q)$(call remove_files,$(ZSHCOMPDIR),$(notdir $(ZSH_COMPLETION)))
