@@ -129,18 +129,24 @@ wf_version() {
 #                              package.json, Cargo.toml and pyproject.toml are read
 #                              as such; any other file holds just the version
 #   workflow.tagPrefix         what comes before X.Y.Z in tags and branch names (v)
+#   workflow.environments      long-lived branches downstream of mainBranch, in order
+#                              ("staging production"); `promote` moves each one up to
+#                              the one before it, and they're protected like main
 #   workflow.protected         extra protected branches (multi-valued)
 #
 # A key with a dot belongs to a branch type, workflow.<type>.<key>:
 #
 #   prefix      branch name prefix ("" for the type unprefixed branches belong to)
-#   from        main | dev | latest-release: where `start` branches it from
-#   into        main | dev | none: where `finish` integrates it (none: no such type)
-#   integrate   pr | merge (default: workflow.integrate)
+#   from        main | dev | latest-release | <environment> | last-environment:
+#               where `start` branches it from
+#   into        main | dev | <environment> | last-environment | none: where
+#               `finish` integrates it (none: no such type)#   integrate   pr | merge (default: workflow.integrate)
 #   tag         none | merge | tip: tag <tagPrefix>X.Y.Z (named in the branch) on the merge
 #               commit or on the branch's tested tip; anything but none makes the
 #               type versioned
-#   backMerge   none | dev: after merging into main, merge main into dev
+#   backMerge   none | dev | upstream: after integrating, merge what it went
+#               into into dev, or into each branch above it in the environment
+#               chain (production: staging, then main)
 #   single      true: one branch of this type open at a time
 #
 # A .gitworkflow file is someone else's: its values are data, checked against
@@ -221,7 +227,7 @@ wf_flows() {
 
 # The keys each kind of source may set. Branch type keys are allowed wherever
 # "type" is listed.
-__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile tagprefix type "
+__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile tagprefix environments type "
 __WF_REPO_KEYS=" flow$__WF_FLOW_KEYS strict protected forge "
 __WF_GIT_KEYS="$__WF_REPO_KEYS remote upstream "
 __WF_TYPE_KEYS=" prefix from into integrate tag backmerge single "
@@ -596,6 +602,36 @@ while IFS= read -r __p; do
 done < <(conf_all protected)
 unset __p
 
+# workflow.environments: long-lived branches downstream of mainBranch, in
+# order (GitLab flow's "staging production"). Read with `read -a`, not word
+# splitting, so a "*" in someone's .gitworkflow is never a glob.
+ENVIRONMENTS=''
+if conf_get environments; then
+    case "$CONF_VAL" in
+    *[![:space:]]*)
+        read -r -a __envs <<<"$CONF_VAL"
+        for __e in "${__envs[@]}"; do
+            case " main dev none latest-release last-environment upstream $MAIN_BRANCH $DEV_BRANCH $ENVIRONMENTS " in
+            *" $__e "*)
+                __wf_problem "workflow.environments ($CONF_SRC): '$__e' can't be an environment (a keyword, the main or dev branch, or listed twice); ignored."
+                continue
+                ;;
+            esac
+            if __wf_valid_branch "$__e"; then
+                ENVIRONMENTS="$ENVIRONMENTS $__e"
+            else
+                __wf_problem "workflow.environments ($CONF_SRC): '$__e' is not a valid branch name; ignored."
+            fi
+        done
+        ENVIRONMENTS="${ENVIRONMENTS# }"
+        unset __envs __e
+        ;;
+    esac
+fi
+# The values from and into take, beyond main and dev
+__WF_POINTS="$ENVIRONMENTS"
+[ -n "$ENVIRONMENTS" ] && __WF_POINTS="$__WF_POINTS last-environment"
+
 # ---------------------------------------------------------------------------
 # Branch types
 #
@@ -639,7 +675,7 @@ __wf_load_types() {
         esac
         seen="$seen$type "
 
-        __wf_type_key "$type" into none "main dev none"
+        __wf_type_key "$type" into none "main dev $__WF_POINTS none"
         into="$TV"
         if ! conf_get "$type.into"; then
             # Your global config covers every repository, including ones whose
@@ -673,13 +709,13 @@ __wf_load_types() {
             esac
             prefixes="$prefixes$prefix "
         fi
-        __wf_type_key "$type" from dev "main dev latest-release"
+        __wf_type_key "$type" from dev "main dev latest-release $__WF_POINTS"
         from="$TV"
         __wf_type_key "$type" integrate "$INTEGRATE" "pr merge"
         integrate="$TV"
         __wf_type_key "$type" tag none "none merge tip"
         tag="$TV"
-        __wf_type_key "$type" backmerge none "none dev"
+        __wf_type_key "$type" backmerge none "none dev upstream"
         back="$TV"
         __wf_bool single "$type.single" false
 
@@ -737,12 +773,81 @@ type_versioned() {
     type_get "$1" && [ "$T_TAG" != none ]
 }
 
-# resolve_point <main|dev>: the branch it names
+# resolve_point <main|dev|last-environment|environment>: the branch it names
 resolve_point() {
     case "$1" in
     main) printf '%s' "$MAIN_BRANCH" ;;
     dev) printf '%s' "$DEV_BRANCH" ;;
+    last-environment) printf '%s' "${ENVIRONMENTS##* }" ;;
+    *) printf '%s' "$1" ;; # an environment (checked when the settings were read)
     esac
+}
+
+# is_environment <branch>: one of workflow.environments
+is_environment() {
+    case " $ENVIRONMENTS " in
+    *" $1 "*) [ -n "$1" ] ;;
+    *) return 1 ;;
+    esac
+}
+
+# env_source <environment>: the branch it's promoted from, the one before it
+# in the chain mainBranch, then the environments
+env_source() {
+    local b prev="$MAIN_BRANCH"
+    for b in $ENVIRONMENTS; do
+        if [ "$b" = "$1" ]; then
+            printf '%s' "$prev"
+            return 0
+        fi
+        prev="$b"
+    done
+    return 1
+}
+
+# back_targets <type>: where finish merges back after integrating a branch
+# of <type>, in order: the dev branch (backMerge dev), or each branch above
+# its target in the environment chain, nearest first (backMerge upstream)
+back_targets() {
+    local into b out=""
+    type_get "$1" || return 0
+    into=$(resolve_point "$T_INTO")
+    case "$T_BACK" in
+    dev) [ "$DEV_BRANCH" != "$into" ] && printf '%s' "$DEV_BRANCH" ;;
+    upstream)
+        is_environment "$into" || return 0
+        for b in "$MAIN_BRANCH" $ENVIRONMENTS; do
+            [ "$b" = "$into" ] && break
+            out="$b${out:+ $out}"
+        done
+        printf '%s' "$out"
+        ;;
+    esac
+}
+
+# "a", "a and b", "a, b and c"
+and_list() {
+    local out="" n=0 w
+    for w in "$@"; do
+        n=$((n + 1))
+        if [ "$n" -eq 1 ]; then
+            out="$w"
+        elif [ "$n" -eq "$#" ]; then
+            out="$out and $w"
+        else
+            out="$out, $w"
+        fi
+    done
+    printf '%s' "$out"
+}
+
+# "1 commit", "3 commits"
+count_commits() {
+    if [ "$1" -eq 1 ]; then
+        printf '1 commit'
+    else
+        printf '%s commits' "$1"
+    fi
 }
 
 # Say what's wrong with the settings, once per command
@@ -854,7 +959,7 @@ flow_warn() {
 
 is_protected_branch() {
     local branch="$1" p
-    for p in "$MAIN_BRANCH" "$DEV_BRANCH" $EXTRA_PROTECTED; do
+    for p in "$MAIN_BRANCH" "$DEV_BRANCH" $ENVIRONMENTS $EXTRA_PROTECTED; do
         [ "$branch" = "$p" ] && return 0
     done
     return 1

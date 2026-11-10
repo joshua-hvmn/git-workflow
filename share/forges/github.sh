@@ -6,10 +6,12 @@
 #
 #   forge_name                        what to call it in messages
 #   forge_require                     fail, saying what to install, if it can't work here
-#   forge_pr_find <branch> <remote>   "<OPEN|MERGED|CLOSED> <url>" of the newest pull
+#   forge_pr_find <branch> <remote> [<base>]
+#                                     "<OPEN|MERGED|CLOSED> <url>" of the newest pull
 #                                     request from <branch> (pushed to <remote>) into
-#                                     UPSTREAM; nothing if there's none; fails if
-#                                     the forge can't be asked
+#                                     UPSTREAM, and into <base> when it's given;
+#                                     nothing if there's none; fails if the forge
+#                                     can't be asked. A forge may ignore <base>.
 #   forge_pr_merge_commit <branch> <remote>
 #                                     the commit that merged it (merge, squash or rebase)
 #   forge_pr_head <branch> <remote>   the head commit it was merged at
@@ -72,7 +74,7 @@ __gh_pick() {
 
 forge_pr_find() {
     __gh_repo
-    gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state all --limit 30 \
+    gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" ${3:+--base "$3"} --state all --limit 30 \
         --json state,url,headRepositoryOwner \
         --jq "$(__gh_pick "$2") | if . == null then empty else .state + \" \" + .url end"
 }
