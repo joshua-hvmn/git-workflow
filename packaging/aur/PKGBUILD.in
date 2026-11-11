@@ -1,5 +1,9 @@
 # Maintainer: Joshua Haveman <192386592+joshua-hvmn@users.noreply.github.com>
 #
+# A template: packaging/render fills in the version and the tarball's sha256,
+# and every stable release's page has the result as PKGBUILD (with
+# PKGBUILD.sig), ready for the AUR. See packaging/README.md.
+#
 # Builds from the signed release tarball. makepkg checks the signature against
 # the primary key below; the tarball is signed by its repo-only subkey,
 # 1CEAA8B4D3B8749EB3489943AEA64E977A5B316A. Import the key once with:
@@ -7,18 +11,20 @@
 
 pkgname=git-workflow
 _name=git-workflow # the project and tarball name, if pkgname ever differs
-pkgver=2.0.0
+pkgver=@VERSION@
 pkgrel=1
-pkgdesc='Git flow or trunk flow with guardrails, SemVer prerelease tags and atomic releases'
+pkgdesc='Git flow, GitHub flow or GitLab flow, with guardrails, SemVer prerelease tags and atomic releases'
 arch=('any')
 url='https://github.com/joshua-hvmn/git-workflow'
 license=('MIT')
 depends=('bash' 'git')
-optdepends=('github-cli: open pull requests on finish (workflow.finishTopic=pr)'
-    'bash-completion: tab completion')
+optdepends=('github-cli: open pull requests on GitHub (the default, workflow.integrate=pr)'
+    'glab: open merge requests on GitLab (with jq)'
+    'jq: open merge requests on GitLab (with glab)'
+    'bash-completion: tab completion in bash')
 checkdepends=('bash-bats')
 source=("$url/releases/download/v$pkgver/$_name-v$pkgver.tar.gz"{,.sig})
-sha256sums=('3c83fbe70f7d509ce368753242a7b5e486a1432b3fd18cecaa65a99d34e22d50'
+sha256sums=('@SHA256@'
     'SKIP')
 validpgpkeys=('4474376DA30B98D6FC34D217348CC5A7E89CC1CD') # Joshua Haveman
 

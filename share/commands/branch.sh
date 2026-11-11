@@ -13,6 +13,8 @@
 . "$GIT_WORKFLOW_DATADIR/core.sh"
 . "$GIT_WORKFLOW_DATADIR/release.sh"
 . "$GIT_WORKFLOW_DATADIR/flow.sh"
+. "$GIT_WORKFLOW_DATADIR/promote.sh"
+. "$GIT_WORKFLOW_DATADIR/status.sh"
 
 branch_usage() {
     local b
@@ -21,13 +23,18 @@ branch_usage() {
 usage: $b [<subcommand>] [args]
 
   start <type> [name]                   start a branch ($WF_FLOW flow: $(types_list))
-  prerelease|pre [label|tag] [-n] [-l]  tag a versioned branch as vX.Y.Z-<label>.N and push
-  release [vX.Y.Z] [-n]                 tag the newest prerelease's commit vX.Y.Z (flows that release from main)
+  prerelease|pre [label|tag] [-n] [-l]  tag a versioned branch as $VFMT-<label>.N and push
+  release [$VFMT] [-n]                 tag the newest prerelease's commit $VFMT (flows that release from main)
   finish [branch]                       integrate per the flow (merge, or pull request), tag, push
   delete [branch] [-y] [-f]             delete a branch locally and on the remote (-f: even if unmerged)
+  promote [environment] [-n]            move an environment branch up to the one before it
+  status [--no-fetch]                   where you are in the flow, what's next, and what's left to do
   config                                show the flow and effective settings
   help                                  this message
   version                               show the git-workflow version
+
+start, pre, release, finish and promote take -y: answer their questions with yes.
+Flow warnings still ask (or abort, with workflow.strict)
 
 Options go to 'git branch' (e.g. '$b -a', '$b -vv').
 Manual: git workflow help branch
@@ -52,6 +59,12 @@ prerelease | pre)
     ;;
 release)
     release_main "$@"
+    ;;
+promote)
+    promote_branch "$@"
+    ;;
+status)
+    show_status "$@"
     ;;
 config)
     show_config "$@"

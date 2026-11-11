@@ -1,5 +1,69 @@
 # Changelog
 
+## v3.1.0
+
+### Added
+
+- **GitLab flow** (`share/flows/gitlab`, picked with `workflow.flow gitlab`): topics into `main`,
+  and a chain of environment branches, `main → staging → production`. **`git b promote`** moves
+  an environment up to the branch before it, so it gets exactly what that one tested: a
+  fast-forward (or a merge commit with the tested tree) when merging locally, or a pull request.
+  An environment with changes its source doesn't have is refused. Hotfixes start from
+  `production`, go into it, and are merged back into `staging` and `main`.
+- Branch types can start from and finish into environments (`from`/`into` take an environment's
+  name, or `last-environment`), and `backMerge = upstream` merges into each branch above the
+  target. `workflow.environments` names a repository's own.
+- **`git b status`**: the flow and the latest release; the current branch, its commits, its
+  prereleases (and the commits after the last one), its pull request, and the command to run
+  next; the open branches of each type; the environment branches; and what's left to do: a
+  release merged but never tagged (`finish` wasn't run again after its pull request merged), a
+  hotfix not merged back, a merged topic still around, a prerelease of `main` never released.
+  `--no-fetch` skips the fetch.
+- **Versions beyond `vX.Y.Z` and `VERSION`.** `workflow.tagPrefix` (default `v`) is what comes
+  before `X.Y.Z` in tags and branch names: `""` for `1.2.3`, `pkg-a/v` for one package of a
+  monorepo. `workflow.versionFile` reads `package.json`, `Cargo.toml` (`[package]`, else
+  `[workspace.package]`) and `pyproject.toml` (`[project]`, else `[tool.poetry]`) by name, with
+  awk: nothing to install, and nothing in the file runs.
+- **`git b start release minor`** (`major`, `patch`) starts the next version after the latest
+  release, and a version typed without its `v` gets one. On a new release or hotfix branch,
+  `start` offers to set the version file and commit it, keeping how the file writes it.
+- **`-y`** for `start`, `pre`, `release`, `finish` and `promote`: answer their questions with
+  yes, so they can run from a script. Flow warnings still ask (or abort without a terminal, or
+  in strict mode).
+- **A GitLab forge** (`share/forges/gitlab.sh`, with `glab` and `jq`), used unless
+  `workflow.forge` says otherwise when the upstream remote's URL says gitlab. Merge requests
+  from a fork name it as their head project.
+- Forges of your own in `~/.config/git-workflow/forges/<name>.sh`, like flows. A forge can say
+  where to watch the release run (`forge_ci_hint`): GitHub Actions, now on GitHub Enterprise
+  hosts too once `workflow.forge` is `github`, and GitLab pipelines.
+- **zsh and fish completion**, installed into `ZSHCOMPDIR` (zsh's `site-functions`) and
+  `FISHCONFDIR` (fish's `vendor_conf.d`), aliases included.
+- Every stable release carries an AUR `PKGBUILD` and a Homebrew formula, filled in with its
+  version and the tarball's hash and signed with the release key, ready to publish as they are.
+  CI checks the PKGBUILD with `makepkg --printsrcinfo` and `namcap` on every push.
+- `docs/`: configuration, releasing, and the design notes; and `docs/demo.tape`, a recording
+  script for [vhs](https://github.com/charmbracelet/vhs).
+
+### Changed
+
+- `git b delete`'s 1.x spellings of `-y` (`-d`, `--d`, `--delete`, `--y`, and `y`, `yes` or `d`
+  after the branch name) warn that they go away in v4. `-d` read as `git branch -d`.
+- `workflow.versionFile` must be a path inside the repository, since `start` can write to it
+  and a `.gitworkflow` can set it.
+- The README leads with what git-workflow is for and how it compares; the reference moved to
+  `docs/`.
+- `packaging/` holds templates (`aur/PKGBUILD.in`, `homebrew/git-workflow.rb.in`) and
+  `packaging/render`, not recipes for one release: they built v2.0.0 until now.
+- `make test`, `make check` and `make installcheck` run the suite in parallel, `JOBS` tests at a
+  time (three per CPU), when GNU parallel is installed; `JOBS=1` runs it in order. Each test
+  copies a fixture built once per file instead of building its own, which halves what a test
+  costs before it starts.
+
+### Fixed
+
+- `finish` on a merged pull request found the merge with one `git merge-base` per commit `main`
+  had gained since: 600 commits took 4.5 s. It's one `git rev-list` now.
+
 ## v3.0.0
 
 ### Changed

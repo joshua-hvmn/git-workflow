@@ -58,21 +58,35 @@ _git_workflow() {
         if [ "$n" -eq 1 ]; then
             case "$cur" in
             -*) _git_branch ;; # options go to git branch
-            *) __gitcomp "start pre prerelease release finish delete config help version" ;;
+            *) __gitcomp "start pre prerelease release finish delete promote status config help version" ;;
             esac
             return
         fi
         case "$sub" in
         start)
-            if [ "$n" -eq 2 ]; then
-                # The branch types of this repository's flow
-                __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
-            fi
+            case "$cur" in
+            -*) __gitcomp "--yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    # The branch types of this repository's flow
+                    __gitcomp "$(__git workflow branch config --types 2>/dev/null)"
+                elif [ "$n" -eq 3 ] && __git workflow branch config --versioned-types 2>/dev/null |
+                    grep -qxF -- "${args[2]}"; then
+                    # A version: the next major, minor or patch release
+                    __gitcomp "major minor patch"
+                fi
+                ;;
+            esac
             ;;
         finish)
-            if [ "$n" -eq 2 ]; then
-                __gitcomp_direct "$(__git_heads "" "$cur" " ")"
-            fi
+            case "$cur" in
+            -*) __gitcomp "--yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    __gitcomp_direct "$(__git_heads "" "$cur" " ")"
+                fi
+                ;;
+            esac
             ;;
         delete)
             case "$cur" in
@@ -82,12 +96,28 @@ _git_workflow() {
             ;;
         pre | prerelease)
             case "$cur" in
-            -*) __gitcomp "--dry-run --list" ;;
+            -*) __gitcomp "--dry-run --list --yes" ;;
             esac
             ;;
         release)
             case "$cur" in
-            -*) __gitcomp "--dry-run" ;;
+            -*) __gitcomp "--dry-run --yes" ;;
+            esac
+            ;;
+        promote)
+            case "$cur" in
+            -*) __gitcomp "--dry-run --yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    # This repository's environment branches
+                    __gitcomp "$(__git workflow branch config --environments 2>/dev/null)"
+                fi
+                ;;
+            esac
+            ;;
+        status)
+            case "$cur" in
+            -*) __gitcomp "--no-fetch" ;;
             esac
             ;;
         esac

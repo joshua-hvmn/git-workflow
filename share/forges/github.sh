@@ -6,10 +6,12 @@
 #
 #   forge_name                        what to call it in messages
 #   forge_require                     fail, saying what to install, if it can't work here
-#   forge_pr_find <branch> <remote>   "<OPEN|MERGED|CLOSED> <url>" of the newest pull
+#   forge_pr_find <branch> <remote> [<base>]
+#                                     "<OPEN|MERGED|CLOSED> <url>" of the newest pull
 #                                     request from <branch> (pushed to <remote>) into
-#                                     UPSTREAM; nothing if there's none; fails if
-#                                     the forge can't be asked
+#                                     UPSTREAM, and into <base> when it's given;
+#                                     nothing if there's none; fails if the forge
+#                                     can't be asked. A forge may ignore <base>.
 #   forge_pr_merge_commit <branch> <remote>
 #                                     the commit that merged it (merge, squash or rebase)
 #   forge_pr_head <branch> <remote>   the head commit it was merged at
@@ -17,9 +19,14 @@
 #                                     open one into <base>; an empty title fills the
 #                                     title and body from the commits
 #
+# and, if it can, one more:
+#
+#   forge_ci_hint                     where to watch a release run: a URL, and a
+#                                     command ("<url>  (or: gh run watch)")
+#
 # Pull requests always go to UPSTREAM's repository. A branch on another remote
-# (your fork) is <fork owner>:<branch> there. Another forge (GitLab's glab, say)
-# is another file with these six functions.
+# (your fork) is <fork owner>:<branch> there. Another forge is another file
+# with these functions, in share/forges/ or ~/.config/git-workflow/forges/.
 
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Joshua Haveman
@@ -67,7 +74,7 @@ __gh_pick() {
 
 forge_pr_find() {
     __gh_repo
-    gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state all --limit 30 \
+    gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" ${3:+--base "$3"} --state all --limit 30 \
         --json state,url,headRepositoryOwner \
         --jq "$(__gh_pick "$2") | if . == null then empty else .state + \" \" + .url end"
 }
@@ -84,6 +91,19 @@ forge_pr_head() {
     gh pr list ${GH_REPO:+--repo "$GH_REPO"} --head "$1" --state merged --limit 30 \
         --json headRefOid,headRepositoryOwner \
         --jq "$(__gh_pick "$2") | if . == null then empty else .headRefOid end"
+}
+
+# GitHub Actions for the repository the tags go to: github.com, or a GitHub
+# Enterprise host when workflow.forge says it's GitHub
+forge_ci_hint() {
+    local slug
+    slug=$(remote_slug "$UPSTREAM")
+    case "$slug" in
+    '') return 0 ;;
+    github.com/*) ;;
+    *) [ -n "$FORGE_WHY" ] || return 0 ;;
+    esac
+    printf 'https://%s/actions  (or: gh run watch)' "$slug"
 }
 
 forge_pr_create() {

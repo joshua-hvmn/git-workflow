@@ -1,33 +1,46 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-10-12 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-11-10 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow-branch \- start, prerelease, release, finish and delete branches following the flow
+git-workflow-branch \- start, prerelease, release, finish, delete and show
+branches following the flow
 .SH SYNOPSIS
 .B git workflow branch
 .RI [ git-branch-options ]
 .br
 .B git workflow branch start
 .I type
-.RI [ name ]
+.RI [ name | version | \fBmajor\fR | \fBminor\fR | \fBpatch\fR ]
+.RB [ \-y ]
 .br
 .B git workflow branch pre
 .RI [ label | vX.Y.Z | tag ]
 .RB [ \-n ]
 .RB [ \-l ]
+.RB [ \-y ]
 .br
 .B git workflow branch release
 .RI [ vX.Y.Z ]
 .RB [ \-n ]
+.RB [ \-y ]
 .br
 .B git workflow branch finish
 .RI [ branch ]
+.RB [ \-y ]
 .br
 .B git workflow branch delete
 .RI [ branch ]
 .RB [ \-y ]
 .RB [ \-f ]
 .br
+.B git workflow branch promote
+.RI [ environment ]
+.RB [ \-n ]
+.RB [ \-y ]
+.br
+.B git workflow branch status
+.RB [ \-\-no\-fetch ]
+.br
 .B git workflow branch config
-.RB [ \-\-types ]
+.RB [ \-\-types | \-\-versioned\-types | \-\-environments ]
 |
 .B help
 |
@@ -59,9 +72,39 @@ the 1.x name
 works after
 .B git workflow
 too.
+.PP
+.B start ,
+.B pre ,
+.B release ,
+.B finish
+and
+.B promote
+take
+.B \-y
+.RB ( \-\-yes ):
+answer their questions with yes, printing each one followed by
+.BR "y (\-y)" ,
+so they can run from a script. Flow warnings are not questions
+.B \-y
+answers: they still ask, and abort without a terminal or when
+.B workflow.strict
+is set. Where a question offers to roll back a failed
+.BR finish ,
+yes is the rollback.
+.PP
+Versions are SemVer after the tag prefix
+.RB ( workflow.tagPrefix ,
+default
+.BR v ),
+written
+.I vX.Y.Z
+below. A version typed without the prefix gets it:
+.B start release 1.2.0
+is
+.BR release/v1.2.0 .
 .SH COMMANDS
 .TP
-.B start \fItype\fR [\fIname\fR]
+.B start \fItype\fR [\fIname\fR] [\fB\-y\fR]
 Create a branch of one of the flow's types from where the type says, and
 push it.
 .B config
@@ -76,7 +119,26 @@ from the main branch. In
 topic branches start from the main branch and
 .I hotfix/vX.Y.Z
 from the latest release tag, since the main branch already has unreleased
-work. Versions are checked against existing tags. The 2.x spellings
+work. In
+.BR gitlab ,
+topic branches start from the main branch and
+.I hotfix/name
+from the last environment branch
+.RB ( production ). Versions are checked against existing tags. For a release or hotfix
+branch (any versioned type),
+.BR major ,
+.B minor
+or
+.B patch
+in place of the version names the next one after the latest release
+(after 0.0.0 when there's none). When the
+.B workflow.versionFile
+file has a different version, start offers to set it and commit
+.RB \(lq "bump version to" " \fIvX.Y.Z\fR\(rq,"
+keeping how the file writes it, and says when a lock file
+.RB ( Cargo.lock ,
+.BR package\-lock.json )
+records the version too. The 2.x spellings
 .RB ( t ,
 .BR \-\-topic ,
 \&...) still work.
@@ -84,7 +146,7 @@ Tracked edits come along, as with
 .BR "git switch \-c" .
 A name that already exists locally or on the remote is refused.
 .TP
-.B pre \fR[\fIlabel\fR | \fIvX.Y.Z\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR]
+.B pre \fR[\fIlabel\fR | \fIvX.Y.Z\fR | \fItag\fR] [\fB\-n\fR] [\fB\-l\fR] [\fB\-y\fR]
 Tag the current release or hotfix branch (any versioned type) as a
 prerelease and push the tag.
 With no argument the tag is
@@ -115,7 +177,7 @@ shows what would be tagged and never prompts or stops.
 .B \-l
 lists the prereleases for the branch's version.
 .TP
-.B release \fR[\fIvX.Y.Z\fR] [\fB\-n\fR]
+.B release \fR[\fIvX.Y.Z\fR] [\fB\-n\fR] [\fB\-y\fR]
 In flows that release from the main branch: tag the commit the newest
 prerelease of
 .I vX.Y.Z
@@ -131,7 +193,7 @@ refuses.
 .B \-n
 shows what would be tagged.
 .TP
-.B finish \fR[\fIbranch\fR]
+.B finish \fR[\fIbranch\fR] [\fB\-y\fR]
 Integrate a branch where its type says
 .RB ( config
 shows where).
@@ -150,7 +212,10 @@ and only the tag pushed; in
 a pull request from the main branch into the dev branch follows. Tagging
 the merge works however the pull request was merged; tagging the tested
 tip (GitHub flow's hotfixes) needs a merge commit, and a squashed one is
-refused.
+refused. In
+.BR gitlab ,
+a hotfix merged into production is followed by a pull request from
+production into each branch above it (staging, then the main branch).
 .IP
 Merging locally
 .RB ( workflow.integrate=merge ),
@@ -162,7 +227,10 @@ branch, tagged
 (on the merge, or on the tested tip), merged back into the dev branch
 (git flow), and pushed with
 .B git push \-\-atomic
-together with that one tag.
+together with that one tag. In
+.BR gitlab ,
+a hotfix is merged into production, production into staging and the main
+branch, and all three pushed in that one atomic push.
 Nothing is pushed until every local step has succeeded. If a merge
 conflicts, the dev branch has diverged, or the push is rejected, finish
 restores the main and dev branches, deletes the tag it made, and returns
@@ -181,22 +249,72 @@ A branch with commits that aren't merged into the main or dev branch
 .B \-f
 is given; one whose pull request was squash- or rebase-merged counts as
 merged. Protected branches are never deleted.
+The 1.x spellings of
+.B \-y
+.RB ( \-d ,
+.BR \-\-d ,
+.BR \-\-delete ,
+.BR \-\-y ,
+and
+.BR y ,
+.B yes
+or
+.B d
+after the branch name) still work, with a warning, until v4.
 .TP
-.B config \fR[\fB\-\-types\fR]
+.B promote \fR[\fIenvironment\fR] [\fB\-n\fR] [\fB\-y\fR]
+In flows with environment branches
+.RB ( workflow.environments ,
+set by
+.BR gitlab ):
+move an environment up to the branch before it in the chain (the main
+branch, then each environment in order), so it gets exactly what that one
+tested. With no environment, the first one that's behind.
+Merging locally
+.RB ( workflow.integrate=merge ),
+the environment is fast-forwarded to the tested commit and pushed; when
+an earlier promotion was a merge or a squash, a merge commit with exactly
+the source's tree is pushed instead. With pull requests, one is opened
+from the source into the environment, or the open one shown.
+An environment with changes its source doesn't have (a hotfix not merged
+back) is refused, since the result would be untested. A missing
+environment is created at its source.
+.B \-n
+shows what would move.
+.TP
+.B status \fR[\fB\-\-no\-fetch\fR]
+Show the flow and the latest release; the current branch, its commits of
+its own and unpushed ones, its prereleases and the commits after the last
+one, its pull request, and the command to run next; the open branches of
+each type; each environment branch against the one before it; and what's
+left to do: a release or hotfix branch merged into the main branch but
+never tagged (finish wasn't run again after its pull request merged), a
+branch merged but not merged back, a merged topic branch still around, a
+prerelease of the main branch never released. It fetches first, unless
+.BR \-\-no\-fetch ,
+and asks the forge only about the current branch, and only when git
+can't see it merged.
+.TP
+.B config \fR[\fB\-\-types\fR | \fB\-\-versioned\-types\fR]
 Show the flow, why it's the flow, every setting with where it came from,
 and the branch types.
 .B \-\-types
-prints only the type names.
+prints only the type names, and
+.B \-\-versioned\-types
+the ones whose branches are named by version, and
+.B \-\-environments
+the environment branches.
 .TP
 .B version
 Show the installed version.
 .SH EXAMPLES
 .nf
-git workflow branch start release v1.2.0
+git workflow branch start release minor  # release/v1.2.0 after v1.1.x; offers to bump VERSION
 git workflow branch pre              # v1.2.0\-rc.1, pushed; CI publishes a prerelease
 git workflow branch pre              # v1.2.0\-rc.2
 git workflow branch finish           # pull request into main; once it's merged,
 git workflow branch finish           # v1.2.0 tagged, back-merge pull request into next
+git workflow branch status           # what's open, and what's left to do
 
 # GitHub flow
 git workflow branch start topic fix
@@ -204,6 +322,11 @@ git workflow branch finish           # pushes it, opens a pull request
 git workflow branch finish           # after the merge: deletes the branch
 git workflow branch pre              # on main: v1.3.0\-rc.1 (from VERSION)
 git workflow branch release          # tags rc.1's commit v1.3.0
+
+# GitLab flow (workflow.flow gitlab)
+git workflow branch promote          # main \-> staging: the commit main has
+git workflow branch promote production   # staging \-> production
+git workflow branch start hotfix fix # from production; finish merges it back
 .fi
 .SH SEE ALSO
 .BR git\-workflow (1)

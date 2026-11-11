@@ -120,22 +120,33 @@ wf_version() {
 #   workflow.releaseFromMain   true: `pre` and `release` tag main directly
 #   workflow.remote            where your branches go (your fork, if you use one)
 #   workflow.upstream          where mainBranch, devBranch and the tags live
-#   workflow.forge             what opens pull requests (default: github, through gh)
+#   workflow.forge             what opens pull requests: github (gh) or gitlab (glab),
+#                              or ~/.config/git-workflow/forges/<name>.sh (default:
+#                              gitlab when the upstream remote's URL says gitlab, else github)
 #   workflow.prereleaseLabel   default label for `pre` (rc)
 #   workflow.strict            true: flow violations abort instead of asking
-#   workflow.versionFile       must match the version being tagged; "" disables
+#   workflow.versionFile       must match the version being tagged; "" disables.
+#                              package.json, Cargo.toml and pyproject.toml are read
+#                              as such; any other file holds just the version
+#   workflow.tagPrefix         what comes before X.Y.Z in tags and branch names (v)
+#   workflow.environments      long-lived branches downstream of mainBranch, in order
+#                              ("staging production"); `promote` moves each one up to
+#                              the one before it, and they're protected like main
 #   workflow.protected         extra protected branches (multi-valued)
 #
 # A key with a dot belongs to a branch type, workflow.<type>.<key>:
 #
 #   prefix      branch name prefix ("" for the type unprefixed branches belong to)
-#   from        main | dev | latest-release: where `start` branches it from
-#   into        main | dev | none: where `finish` integrates it (none: no such type)
-#   integrate   pr | merge (default: workflow.integrate)
-#   tag         none | merge | tip: tag vX.Y.Z (named in the branch) on the merge
+#   from        main | dev | latest-release | <environment> | last-environment:
+#               where `start` branches it from
+#   into        main | dev | <environment> | last-environment | none: where
+#               `finish` integrates it (none: no such type)#   integrate   pr | merge (default: workflow.integrate)
+#   tag         none | merge | tip: tag <tagPrefix>X.Y.Z (named in the branch) on the merge
 #               commit or on the branch's tested tip; anything but none makes the
 #               type versioned
-#   backMerge   none | dev: after merging into main, merge main into dev
+#   backMerge   none | dev | upstream: after integrating, merge what it went
+#               into into dev, or into each branch above it in the environment
+#               chain (production: staging, then main)
 #   single      true: one branch of this type open at a time
 #
 # A .gitworkflow file is someone else's: its values are data, checked against
@@ -216,7 +227,7 @@ wf_flows() {
 
 # The keys each kind of source may set. Branch type keys are allowed wherever
 # "type" is listed.
-__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile type "
+__WF_FLOW_KEYS=" description mainbranch devbranch integrate releasefrommain prereleaselabel versionfile tagprefix environments type "
 __WF_REPO_KEYS=" flow$__WF_FLOW_KEYS strict protected forge "
 __WF_GIT_KEYS="$__WF_REPO_KEYS remote upstream "
 __WF_TYPE_KEYS=" prefix from into integrate tag backmerge single "
@@ -295,6 +306,8 @@ __wf_read_file() {
 # aliases are collected on the way
 __L_GLOBAL='' __L_REPO='' __L_LOCAL='' __L_COMMAND='' __L_FLOW='' __L_DETECTED=''
 __has_upstream=''
+# "<remote> <url>" lines, for __wf_remote_url
+__WF_REMOTE_URLS=''
 while IFS=$'\t' read -r __scope __rest; do
     __key="${__rest%% *}"
     __value=''
@@ -304,8 +317,11 @@ while IFS=$'\t' read -r __scope __rest; do
         __wf_note_alias "${__key#alias.}" "$__value"
         continue
         ;;
-    remote.upstream.url)
-        __has_upstream=1
+    remote.*.url)
+        __n="${__key#remote.}"
+        __n="${__n%.url}"
+        __WF_REMOTE_URLS="$__WF_REMOTE_URLS$__n $__value$__NL"
+        [ "$__n" = upstream ] && __has_upstream=1
         continue
         ;;
     esac
@@ -314,8 +330,16 @@ while IFS=$'\t' read -r __scope __rest; do
     command) __wf_add_line __L_COMMAND "git -c" "$__key" "$__value" "$__WF_GIT_KEYS" ;;
     *) __wf_add_line __L_GLOBAL "global git config" "$__key" "$__value" "$__WF_GIT_KEYS" ;;
     esac
-done < <(git config --show-scope --get-regexp '^(workflow|alias)\.|^remote\.upstream\.url$' 2>/dev/null || true)
-unset __scope __rest __key __value
+done < <(git config --show-scope --get-regexp '^(workflow|alias)\.|^remote\..*\.url$' 2>/dev/null || true)
+unset __scope __rest __key __value __n
+
+# __wf_remote_url <remote>: its configured URL (from the call above)
+__wf_remote_url() {
+    local all="$__NL$__WF_REMOTE_URLS" after
+    after="${all##*"$__NL$1 "}"
+    [ "$after" != "$all" ] || return 1
+    printf '%s' "${after%%"$__NL"*}"
+}
 
 # Layer 5: the repository's .gitworkflow
 WF_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null) || WF_TOPLEVEL=''
@@ -486,9 +510,6 @@ if conf_get devbranch && [ -n "$CONF_VAL" ]; then
         __wf_problem "workflow.devBranch ($CONF_SRC) '$CONF_VAL' is not a valid branch name; using $MAIN_BRANCH."
     fi
 fi
-# No separate integration branch: trunk / GitHub flow
-TRUNK_MODE=0
-[ "$DEV_BRANCH" = "$MAIN_BRANCH" ] && TRUNK_MODE=1
 
 INTEGRATE="pr"
 if conf_get integrate; then
@@ -507,18 +528,65 @@ if conf_get prereleaselabel; then
 fi
 
 VERSION_FILE=VERSION
-conf_get versionfile && VERSION_FILE="$CONF_VAL"
+if conf_get versionfile; then
+    # A path in the repository: `start` may write to it, and .gitworkflow is
+    # someone else's file
+    case "/$CONF_VAL/" in
+    //*/ | */../* | */-*)
+        __wf_problem "workflow.versionFile ($CONF_SRC) '$CONF_VAL' must be a path inside the repository; using VERSION."
+        ;;
+    *) VERSION_FILE="$CONF_VAL" ;;
+    esac
+fi
 
-FORGE=github
+# Versions are <tagPrefix>X.Y.Z, in tags and in branch names (release/v1.2.3).
+# "" for 1.2.3, or a path for one package of several (pkg/v1.2.3).
+TAG_PREFIX=v
+if conf_get tagprefix; then
+    if [ -z "$CONF_VAL" ] || __wf_valid_branch "${CONF_VAL}1.0.0"; then
+        TAG_PREFIX="$CONF_VAL"
+    else
+        __wf_problem "workflow.tagPrefix ($CONF_SRC) '$CONF_VAL' can't start a tag name; using v."
+    fi
+fi
+# How a version looks, for messages: vX.Y.Z, and an example, v1.2.3
+VFMT="${TAG_PREFIX}X.Y.Z" VEX="${TAG_PREFIX}1.2.3"
+
+# __wf_forge_file <name>: the forge's file, yours first, then the ones that ship
+__wf_forge_file() {
+    local f
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/git-workflow/forges/$1.sh" \
+        "$GIT_WORKFLOW_DATADIR/forges/$1.sh"; do
+        if [ -f "$f" ]; then
+            printf '%s' "$f"
+            return 0
+        fi
+    done
+    return 1
+}
+# FORGE_WHY: where the forge came from, for `config` (empty: the default)
+FORGE=github FORGE_WHY=''
 if conf_get forge; then
     if ! __wf_name_ok "$CONF_VAL"; then
         __wf_problem "workflow.forge ($CONF_SRC) '$CONF_VAL' is not a forge name; using github."
-    elif [ -f "$GIT_WORKFLOW_DATADIR/forges/$CONF_VAL.sh" ]; then
-        FORGE="$CONF_VAL"
+    elif __wf_forge_file "$CONF_VAL" >/dev/null; then
+        FORGE="$CONF_VAL" FORGE_WHY="$CONF_SRC"
     else
-        __wf_problem "workflow.forge ($CONF_SRC): git-workflow has no forge '$CONF_VAL'; using github."
+        __wf_problem "workflow.forge ($CONF_SRC): there's no forge '$CONF_VAL' (~/.config/git-workflow/forges/$CONF_VAL.sh, or one that ships); using github."
     fi
+else
+    # The upstream remote's host: https://user@host:port/path, or user@host:path
+    __host=$(__wf_remote_url "$UPSTREAM") || __host=''
+    __host="${__host#*://}"
+    __host="${__host%%/*}"
+    __host="${__host##*@}"
+    __host="${__host%%:*}"
+    case "$__host" in
+    *gitlab*) FORGE=gitlab FORGE_WHY="guessed: '$UPSTREAM' is on GitLab" ;;
+    esac
+    unset __host
 fi
+FORGE_FILE=$(__wf_forge_file "$FORGE") || FORGE_FILE="$GIT_WORKFLOW_DATADIR/forges/github.sh"
 
 __wf_bool STRICT strict false
 __wf_bool RELEASE_FROM_MAIN releasefrommain false
@@ -533,6 +601,36 @@ while IFS= read -r __p; do
     fi
 done < <(conf_all protected)
 unset __p
+
+# workflow.environments: long-lived branches downstream of mainBranch, in
+# order (GitLab flow's "staging production"). Read with `read -a`, not word
+# splitting, so a "*" in someone's .gitworkflow is never a glob.
+ENVIRONMENTS=''
+if conf_get environments; then
+    case "$CONF_VAL" in
+    *[![:space:]]*)
+        read -r -a __envs <<<"$CONF_VAL"
+        for __e in "${__envs[@]}"; do
+            case " main dev none latest-release last-environment upstream $MAIN_BRANCH $DEV_BRANCH $ENVIRONMENTS " in
+            *" $__e "*)
+                __wf_problem "workflow.environments ($CONF_SRC): '$__e' can't be an environment (a keyword, the main or dev branch, or listed twice); ignored."
+                continue
+                ;;
+            esac
+            if __wf_valid_branch "$__e"; then
+                ENVIRONMENTS="$ENVIRONMENTS $__e"
+            else
+                __wf_problem "workflow.environments ($CONF_SRC): '$__e' is not a valid branch name; ignored."
+            fi
+        done
+        ENVIRONMENTS="${ENVIRONMENTS# }"
+        unset __envs __e
+        ;;
+    esac
+fi
+# The values from and into take, beyond main and dev
+__WF_POINTS="$ENVIRONMENTS"
+[ -n "$ENVIRONMENTS" ] && __WF_POINTS="$__WF_POINTS last-environment"
 
 # ---------------------------------------------------------------------------
 # Branch types
@@ -577,7 +675,7 @@ __wf_load_types() {
         esac
         seen="$seen$type "
 
-        __wf_type_key "$type" into none "main dev none"
+        __wf_type_key "$type" into none "main dev $__WF_POINTS none"
         into="$TV"
         if ! conf_get "$type.into"; then
             # Your global config covers every repository, including ones whose
@@ -611,13 +709,13 @@ __wf_load_types() {
             esac
             prefixes="$prefixes$prefix "
         fi
-        __wf_type_key "$type" from dev "main dev latest-release"
+        __wf_type_key "$type" from dev "main dev latest-release $__WF_POINTS"
         from="$TV"
         __wf_type_key "$type" integrate "$INTEGRATE" "pr merge"
         integrate="$TV"
         __wf_type_key "$type" tag none "none merge tip"
         tag="$TV"
-        __wf_type_key "$type" backmerge none "none dev"
+        __wf_type_key "$type" backmerge none "none dev upstream"
         back="$TV"
         __wf_bool single "$type.single" false
 
@@ -653,7 +751,8 @@ type_get() {
 }
 
 # branch_type <branch>: the type a branch belongs to, by the longest prefix
-# that matches, else the type without a prefix. Prints nothing for main/dev.
+# that matches, else the type without a prefix. main and dev match that one
+# too, so callers rule out protected branches first.
 branch_type() {
     local t best="" best_len=-1
     for t in $WF_TYPES; do
@@ -669,17 +768,86 @@ branch_type() {
     printf '%s' "$best"
 }
 
-# Type is versioned: its branches are named vX.Y.Z and finish with a tag
+# Type is versioned: its branches are named <tagPrefix>X.Y.Z and finish with a tag
 type_versioned() {
     type_get "$1" && [ "$T_TAG" != none ]
 }
 
-# resolve_point <main|dev>: the branch it names
+# resolve_point <main|dev|last-environment|environment>: the branch it names
 resolve_point() {
     case "$1" in
     main) printf '%s' "$MAIN_BRANCH" ;;
     dev) printf '%s' "$DEV_BRANCH" ;;
+    last-environment) printf '%s' "${ENVIRONMENTS##* }" ;;
+    *) printf '%s' "$1" ;; # an environment (checked when the settings were read)
     esac
+}
+
+# is_environment <branch>: one of workflow.environments
+is_environment() {
+    case " $ENVIRONMENTS " in
+    *" $1 "*) [ -n "$1" ] ;;
+    *) return 1 ;;
+    esac
+}
+
+# env_source <environment>: the branch it's promoted from, the one before it
+# in the chain mainBranch, then the environments
+env_source() {
+    local b prev="$MAIN_BRANCH"
+    for b in $ENVIRONMENTS; do
+        if [ "$b" = "$1" ]; then
+            printf '%s' "$prev"
+            return 0
+        fi
+        prev="$b"
+    done
+    return 1
+}
+
+# back_targets <type>: where finish merges back after integrating a branch
+# of <type>, in order: the dev branch (backMerge dev), or each branch above
+# its target in the environment chain, nearest first (backMerge upstream)
+back_targets() {
+    local into b out=""
+    type_get "$1" || return 0
+    into=$(resolve_point "$T_INTO")
+    case "$T_BACK" in
+    dev) [ "$DEV_BRANCH" != "$into" ] && printf '%s' "$DEV_BRANCH" ;;
+    upstream)
+        is_environment "$into" || return 0
+        for b in "$MAIN_BRANCH" $ENVIRONMENTS; do
+            [ "$b" = "$into" ] && break
+            out="$b${out:+ $out}"
+        done
+        printf '%s' "$out"
+        ;;
+    esac
+}
+
+# "a", "a and b", "a, b and c"
+and_list() {
+    local out="" n=0 w
+    for w in "$@"; do
+        n=$((n + 1))
+        if [ "$n" -eq 1 ]; then
+            out="$w"
+        elif [ "$n" -eq "$#" ]; then
+            out="$out and $w"
+        else
+            out="$out, $w"
+        fi
+    done
+    printf '%s' "$out"
+}
+
+# "1 commit", "3 commits"
+count_commits() {
+    if [ "$1" -eq 1 ]; then
+        printf '1 commit'
+    else
+        printf '%s commits' "$1"
+    fi
 }
 
 # Say what's wrong with the settings, once per command
@@ -721,6 +889,11 @@ get_user_input() {
     fi
 }
 
+# -y/--yes (start, pre, release, finish): answer the command's questions
+# with yes. Flow warnings still ask, or abort in strict mode: -y means "I
+# meant to do this", not "skip the guardrails".
+ASSUME_YES=''
+
 # yes or no
 yes_no() {
     local yn_message="${1:-"Null"}"
@@ -737,6 +910,12 @@ yes_no() {
         yn_default="n"
         ;;
     esac
+    # flow_warn sets __wf_ask_anyway, so -y never answers a flow warning
+    if [ -n "$ASSUME_YES" ] && [ -z "${__wf_ask_anyway:-}" ]; then
+        info "$yn_message $yn_options: y (-y)"
+        REPLY=y
+        return 0
+    fi
     while :; do
         # End of input (Ctrl-D, or no terminal) declines; the caller says
         # what was aborted, so only end the prompt's line here
@@ -766,6 +945,7 @@ yes_no() {
 # Flow violations: abort in strict mode, otherwise, warn and ask.
 # Returns 0 to continue and 1 to abort
 flow_warn() {
+    local __wf_ask_anyway=1
     warn "$1"
     if [ "$STRICT" = "true" ]; then
         err "aborting (workflow.strict is enabled)."
@@ -779,7 +959,7 @@ flow_warn() {
 
 is_protected_branch() {
     local branch="$1" p
-    for p in "$MAIN_BRANCH" "$DEV_BRANCH" $EXTRA_PROTECTED; do
+    for p in "$MAIN_BRANCH" "$DEV_BRANCH" $ENVIRONMENTS $EXTRA_PROTECTED; do
         [ "$branch" = "$p" ] && return 0
     done
     return 1
@@ -814,10 +994,10 @@ remote_ref() {
 }
 
 # host/owner/repo of a GitHub-style remote, from its configured URL
-# (github.com/joshua-hvmn/git-workflow); empty otherwise
+# (github.com/joshua-hvmn/git-workflow, gitlab.com/group/sub/repo); empty otherwise
 remote_slug() {
     local url host
-    url=$(git config --get "remote.$1.url") || return 0
+    url=$(__wf_remote_url "$1") || return 0
     url="${url%/}"
     url="${url%.git}"
     case "$url" in
@@ -963,6 +1143,19 @@ sync_remote() {
         git fetch --quiet --prune --no-tags "$REMOTE" ||
             warn "could not fetch from '$REMOTE'; using the last known remote state."
     fi
+}
+
+# The forge (workflow.forge): loaded the first time it's needed. forge_load
+# also checks it can work here (its CLI is installed).
+forge_source() {
+    if [ -z "${__WF_FORGE_LOADED:-}" ]; then
+        # shellcheck source=/dev/null # each forge is checked on its own
+        . "$FORGE_FILE" || return 1
+        __WF_FORGE_LOADED=1
+    fi
+}
+forge_load() {
+    forge_source && forge_require
 }
 
 # Answered locally from refs/remotes/<remote>/*; call sync_remote first for fresh data.

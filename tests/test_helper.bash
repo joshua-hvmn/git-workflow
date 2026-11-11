@@ -2,10 +2,15 @@
 # tag, plus a fresh clone to work in, and the default aliases (git b, git c,
 # ...), so tests run commands the way people type them. Nothing touches your
 # real git config.
+#
+# Building that takes about fifteen git processes and an aliases install, half
+# of what a typical test costs, so it's built once per file (setup_file), and
+# each test gets its own copy: one cp, and its absolute paths moved to the copy.
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
-setup() {
+# __env <dir>: the environment a test runs in, rooted at <dir>
+__env() {
     # GIT_WORKFLOW_BIN runs the suite against an installed copy (make installcheck)
     export PATH="${GIT_WORKFLOW_BIN:-$REPO_ROOT/bin}:$PATH"
     export NO_COLOR=1
@@ -16,26 +21,38 @@ setup() {
     # and ~/.config (where the alias sets go). HOME is a sibling of
     # XDG_CONFIG_HOME, so includes are written with their full path
     export GIT_CONFIG_NOSYSTEM=1
-    export GIT_CONFIG_GLOBAL="$BATS_TEST_TMPDIR/gitconfig"
-    export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/config"
-    export HOME="$BATS_TEST_TMPDIR/home"
-    mkdir -p "$HOME"
-    git config --global user.name "Test"
-    git config --global user.email "test@example.com"
-    git config --global init.defaultBranch main
-    git config --global advice.detachedHead false
-    # Most tests are about what finish does once it merges, so they merge
-    # locally; the ones about pull requests (the default) unset this
-    git config --global workflow.integrate merge
-    git workflow aliases install >/dev/null 2>&1
+    export GIT_CONFIG_GLOBAL="$1/gitconfig"
+    export XDG_CONFIG_HOME="$1/config"
+    export HOME="$1/home"
 
-    REMOTE_DIR="$BATS_TEST_TMPDIR/remote.git"
-    SEED="$BATS_TEST_TMPDIR/seed"
-    WORK="$BATS_TEST_TMPDIR/work"
+    REMOTE_DIR="$1/remote.git"
+    SEED="$1/seed"
+    WORK="$1/work"
+}
 
-    git init -q --bare "$REMOTE_DIR"
-    git clone -q "$REMOTE_DIR" "$SEED" 2>/dev/null
+# The fixture, in $BATS_FILE_TMPDIR/fixture. A file with a setup_file of its
+# own calls this from it.
+fixture_build() {
+    local dir="$BATS_FILE_TMPDIR/fixture"
+    [ -d "$dir" ] && return 0
+    mkdir -p "$dir.tmp/home"
     (
+        __env "$dir.tmp"
+        git config --global user.name "Test"
+        git config --global user.email "test@example.com"
+        git config --global init.defaultBranch main
+        git config --global advice.detachedHead false
+        # No housekeeping after every commit, fetch and push: a process apiece
+        # that no test is about
+        git config --global maintenance.auto false
+        git config --global receive.autoGC false
+        # Most tests are about what finish does once it merges, so they merge
+        # locally; the ones about pull requests (the default) unset this
+        git config --global workflow.integrate merge
+        git workflow aliases install >/dev/null 2>&1
+
+        git init -q --bare "$REMOTE_DIR"
+        git clone -q "$REMOTE_DIR" "$SEED" 2>/dev/null
         cd "$SEED" || exit 1
         echo a >a
         echo b >b
@@ -44,8 +61,31 @@ setup() {
         git tag -a v1.0.0 -m v1.0.0
         git push -q origin main main:next
         git push -q origin v1.0.0
-    )
-    git clone -q "$REMOTE_DIR" "$WORK"
+        git clone -q "$REMOTE_DIR" "$WORK"
+    ) || return 1
+    # Complete or not at all: a test never copies half a fixture
+    mv "$dir.tmp" "$dir"
+}
+
+setup_file() {
+    fixture_build
+}
+
+setup() {
+    local from="$BATS_FILE_TMPDIR/fixture" f content
+    # Not built here: with bats --jobs, a file's tests start together
+    if [ ! -d "$from" ]; then
+        echo "no fixture: this file's setup_file must call fixture_build" >&2
+        return 1
+    fi
+    cp -R "$from/." "$BATS_TEST_TMPDIR/"
+    __env "$BATS_TEST_TMPDIR"
+    # The fixture's absolute paths (the alias include, each clone's origin)
+    # name this test's copy instead. In Bash, so it costs no processes.
+    for f in "$GIT_CONFIG_GLOBAL" "$SEED/.git/config" "$WORK/.git/config"; do
+        content=$(<"$f")
+        printf '%s\n' "${content//"$from.tmp"/$BATS_TEST_TMPDIR}" >"$f"
+    done
     cd "$WORK" || return 1
 }
 

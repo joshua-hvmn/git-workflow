@@ -60,6 +60,8 @@ require_git_completion() {
     [[ "$output" == *$'branch\n'* ]]
     [[ "$output" == *"quick-commit"* ]]
     run complete "git workflow branch st"
+    [ "$output" = $'start\nstatus' ]
+    run complete "git workflow branch star"
     [ "$output" = "start" ]
     run complete "git workflow branch start "
     [ "$output" = $'topic\nrelease\nhotfix' ]
@@ -110,4 +112,94 @@ require_git_completion() {
     require_git_completion
     run complete "git b --show-c"
     [ "$output" = "--show-current" ]
+}
+
+@test "completion: promote offers the environment branches" {
+    require_git_completion
+    git config workflow.flow gitlab
+    run complete "git b promote "
+    [ "$output" = $'staging\nproduction' ]
+    run complete "git b prom"
+    [ "$output" = "promote" ]
+}
+
+@test "completion: start offers major, minor and patch for a versioned type, and -y" {
+    require_git_completion
+    git switch -q next
+    run complete "git b start release "
+    [ "$output" = $'major\nminor\npatch' ]
+    run complete "git b start topic "
+    [ "$output" = "" ]
+    run complete "git b finish --"
+    [ "$output" = "--yes" ]
+    run complete "git b pre --"
+    [[ "$output" == *"--yes"* ]]
+}
+
+# zsh and fish completion, installed where make install puts them, or the checkout's
+our_zsh_completion_dir() {
+    if [ -n "${GIT_WORKFLOW_BIN:-}" ]; then
+        printf '%s' "$GIT_WORKFLOW_BIN/../share/zsh/site-functions"
+    else
+        printf '%s' "$REPO_ROOT/completion"
+    fi
+}
+
+our_fish_completion() {
+    if [ -n "${GIT_WORKFLOW_BIN:-}" ]; then
+        printf '%s' "$GIT_WORKFLOW_BIN/../share/fish/vendor_conf.d/git-workflow.fish"
+    else
+        printf '%s' "$REPO_ROOT/completion/git-workflow.fish"
+    fi
+}
+
+# zsh_complete <line>: the matches zsh offers at the end of <line>, one per line
+zsh_complete() {
+    zsh -f "$REPO_ROOT/tests/zsh_complete.zsh" "$(our_zsh_completion_dir)" "$BATS_TEST_TMPDIR/zsh.matches" "$1"
+}
+
+# fish_complete <line>: the words fish offers at the end of <line>, one per line
+fish_complete() {
+    # shellcheck disable=SC2016 # fish's $argv
+    fish --no-config -c 'source $argv[1]; complete -C $argv[2]' "$(our_fish_completion)" "$1" | cut -f1
+}
+
+@test "zsh: commands, subcommands, branch types and versions, through an alias too" {
+    command -v zsh >/dev/null 2>&1 || skip "zsh isn't installed here"
+    zsh -c 'zmodload zsh/zpty zsh/zselect' 2>/dev/null || skip "zsh has no zpty or zselect module here"
+    git switch -q next
+    run zsh_complete "git workflow "
+    [[ "$output" == *branch*quick-commit* ]]
+    run zsh_complete "git b "
+    [[ "$output" == *start*status* ]]
+    run zsh_complete "git b start "
+    [ "$output" = $'hotfix\nrelease\ntopic' ]
+    run zsh_complete "git b start release "
+    [ "$output" = $'major\nminor\npatch' ]
+    run zsh_complete "git b finish "
+    [[ "$output" == *next* ]]
+    git config workflow.flow gitlab
+    run zsh_complete "git b promote "
+    [ "$output" = $'production\nstaging' ]
+}
+
+@test "fish: commands, subcommands, branch types and versions, through an alias too" {
+    command -v fish >/dev/null 2>&1 || skip "fish isn't installed here"
+    git switch -q next
+    run fish_complete "git workflow "
+    [[ "$output" == *branch*quick-commit* ]]
+    run fish_complete "git b "
+    [[ "$output" == *start*status* ]]
+    [[ "$output" != *commit* ]]
+    run fish_complete "git b start "
+    [ "$output" = $'hotfix\nrelease\ntopic' ]
+    run fish_complete "git b start release "
+    [ "$output" = $'major\nminor\npatch' ]
+    run fish_complete "git b finish --"
+    [[ "$output" == *--yes* ]]
+    run fish_complete "git sync "
+    [[ "$output" == *next* ]]
+    git config workflow.flow gitlab
+    run fish_complete "git b promote "
+    [ "$output" = $'production\nstaging' ]
 }

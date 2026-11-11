@@ -1,6 +1,7 @@
-.TH GIT-WORKFLOW 1 2026-10-12 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW 1 2026-11-10 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow \- git flow, GitHub flow or your own, with SemVer releases and guardrails
+git-workflow \- git flow, GitHub flow, GitLab flow or your own, with SemVer
+releases and guardrails
 .SH SYNOPSIS
 .B git workflow
 .I command
@@ -43,6 +44,18 @@ and a release is a tag
 .RB ( "git workflow branch pre" " and " release ).
 Hotfixes start from the latest release.
 .PP
+In
+.BR "GitLab flow" ,
+topics go into
+.BR main ,
+and changes move down a chain of environment branches,
+.BR main " \(-> " staging " \(-> " production ,
+with
+.BR "git workflow branch promote" .
+Hotfixes start from
+.BR production
+and are merged back up the chain.
+.PP
 .B git workflow branch finish
 opens a pull request by default, and running it again once that's merged
 tags and cleans up; nothing pushes to the main or dev branch. With a fork,
@@ -65,7 +78,8 @@ is
 .SH COMMANDS
 .TP
 .B branch \fR(\fBb\fR)
-Start, prerelease, release, finish and delete branches following the flow;
+Start, prerelease, release, finish and delete branches following the flow,
+and show where you are in it;
 options go to
 .BR git\-branch (1).
 See
@@ -140,10 +154,11 @@ A flow is a file of
 .B workflow.*
 settings (the format of
 .BR git\-config (1)).
-Two ship,
-.B gitflow
+Three ship,
+.BR gitflow ,
+.B github
 and
-.BR github ;
+.BR gitlab ;
 one in
 .I ~/.config/git\-workflow/flows/<name>
 is a flow too, and can define its own branch types.
@@ -156,6 +171,9 @@ branch (which then becomes the dev branch), means
 .BR gitflow ;
 anything else
 .BR github .
+.B gitlab
+is never guessed; pick it with
+.BR "workflow.flow gitlab" .
 .B git workflow branch config
 shows the flow, why, and where each setting came from.
 .PP
@@ -231,10 +249,25 @@ when there is one, else
 .BR workflow.remote .
 .TP
 .B workflow.forge
-What opens pull requests. Default:
+What opens pull requests:
 .BR github ,
 through
-.BR gh (1).
+.BR gh (1),
+or
+.BR gitlab ,
+through
+.BR glab (1)
+and
+.BR jq (1),
+or one of yours (see
+.BR FILES ).
+Default:
+.B gitlab
+when the upstream remote's URL says gitlab, else
+.BR github .
+Set it to
+.B github
+for a GitHub Enterprise host, so release runs link to its Actions.
 .TP
 .B workflow.prereleaseLabel
 Default label for
@@ -249,21 +282,71 @@ turns flow warnings into hard stops;
 warns and asks. Default:
 .BR false .
 .TP
+.B workflow.environments
+Environment branches downstream of the main branch, in order, separated
+by spaces. Set by the
+.B gitlab
+flow:
+.BR "staging production" .
+They're protected, branch types can start from and finish into them, and
+.B git workflow branch promote
+moves each one up to the one before it. None may be a keyword
+.RB ( main ,
+.BR dev ,
+.BR none ,
+.BR latest\-release ,
+.BR last\-environment ,
+.BR upstream ),
+the main or dev branch, or listed twice.
+.TP
 .B workflow.protected
-Extra protected branches, in addition to the main and dev branches.
+Extra protected branches, in addition to the main and dev branches and
+the environments.
 Multi-valued: use
 .BR "git config \-\-add" .
 .TP
 .B workflow.versionFile
-File that holds the project's version. When it exists,
+File that holds the project's version, a path inside the repository. When
+it exists,
 .BR "git workflow branch pre" ,
 .B release
 and
 .B finish
-check that it matches the version being tagged ("v1.2.3" or "1.2.3").
+check that it matches the version being tagged, with or without a "v",
+and
+.B start
+offers to set it on a new release or hotfix branch. Its name says how to
+read it:
+.I package.json
+(the top-level
+.BR version ),
+.I Cargo.toml
+.RB ( [package] ,
+else
+.BR [workspace.package] ),
+.I pyproject.toml
+.RB ( [project] ,
+else
+.BR [tool.poetry] );
+any other file holds just the version. One with no version of its own
+(a dynamic version) is skipped.
 Default:
 .BR VERSION .
 An empty value disables the check.
+.TP
+.B workflow.tagPrefix
+What comes before
+.I X.Y.Z
+in tags and in versioned branch names. Default:
+.BR v .
+Empty for
+.IR 1.2.3 ;
+a path for one package of a monorepo:
+.B pkg\-a/v
+tags
+.I pkg\-a/v1.2.3
+from
+.IR release/pkg\-a/v1.2.3 .
 .PP
 Each branch type has these, as
 .BR workflow.<type>.<key> :
@@ -275,17 +358,21 @@ One type has none; branches no other prefix matches belong to it.
 .TP
 .B from
 .BR main ,
-.B dev
-or
-.BR latest\-release :
+.BR dev ,
+.BR latest\-release ,
+an environment, or
+.B last\-environment
+(the last of
+.BR workflow.environments ):
 what
 .B start
 branches from.
 .TP
 .B into
-.B main
-or
-.BR dev :
+.BR main ,
+.BR dev ,
+an environment, or
+.BR last\-environment :
 what
 .B finish
 integrates into.
@@ -314,11 +401,13 @@ makes the type versioned: its branches are named
 .IR vX.Y.Z .
 .TP
 .B backMerge
-.B none
+.BR none ,
+.B dev
 or
-.BR dev :
-after integrating into the main branch, merge it into the dev branch.
-.TP
+.BR upstream :
+after integrating into the main branch, merge it into the dev branch; or,
+after integrating into an environment, merge it into each branch above it
+in the chain, nearest first (production: staging, then main)..TP
 .B single
 .B true
 allows one branch of the type open at a time.
@@ -370,10 +459,11 @@ and finishing (or deleting the current branch) with uncommitted changes.
 When set, messages are not colored.
 .TP
 .B XDG_CONFIG_HOME
-Where your alias sets and flows go: its
-.I git\-workflow/aliases/
-and
+Where your alias sets, flows and forges go: its
+.IR git\-workflow/aliases/ ,
 .I git\-workflow/flows/
+and
+.I git\-workflow/forges/
 directories. Default:
 .IR ~/.config .
 .SH FILES
@@ -398,15 +488,31 @@ Your flows; one named like a shipped flow replaces it.
 .TP
 .I <prefix>/share/git\-workflow/flows/
 The flows that ship:
-.B gitflow
+.BR gitflow ,
+.B github
 and
-.BR github .
+.BR gitlab .
+.TP
+.I ~/.config/git\-workflow/forges/
+Your forges,
+.IR <name>.sh ,
+each picked with
+.BR "workflow.forge <name>" .
+A forge defines the functions
+.I share/git\-workflow/forges/github.sh
+describes.
 .TP
 .I <prefix>/share/git\-workflow/forges/
 What opens pull requests:
 .I github.sh
 uses
-.BR gh (1).
+.BR gh (1),
+and
+.I gitlab.sh
+uses
+.BR glab (1)
+and
+.BR jq (1).
 .TP
 .I .gitworkflow
 In a repository: its flow and settings, for everyone who works on it.
@@ -418,6 +524,16 @@ and the aliases that run it. Git's own completion loads it the first time
 it completes a
 .B git workflow
 command.
+.TP
+.I <prefix>/share/zsh/site\-functions/_git\-workflow
+zsh completion. zsh's git completion finds it on
+.BR $fpath ,
+and expands aliases before calling it.
+.TP
+.I <prefix>/share/fish/vendor_conf.d/git\-workflow.fish
+fish completion, which fish loads at startup: completions for
+.B git
+itself, so aliases complete too.
 .SH SEE ALSO
 .BR git\-workflow\-branch (1),
 .BR git\-workflow\-commit (1),

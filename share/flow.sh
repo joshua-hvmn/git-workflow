@@ -100,7 +100,25 @@ start_type() {
 }
 
 start_branch() {
-    local mode="${1:-}" name="${2:-}" type full others base start_point prompt
+    local mode="" name="" type full others base start_point prompt latest
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -y | --yes) ASSUME_YES=1 ;;
+        *)
+            # The 1.x/2.x type spellings start with a dash too (-t, --topic)
+            if [ -z "$mode" ]; then
+                mode="$1"
+            elif [ -z "$name" ]; then
+                name="$1"
+            else
+                err "too many arguments. usage: $(wf_cmd branch start "<type> [name] [-y]")"
+                return 1
+            fi
+            ;;
+        esac
+        shift
+    done
 
     if [ -z "$mode" ]; then
         err "usage: $(wf_cmd branch start "<type> [name]"). Types in the $WF_FLOW flow: $(types_list)."
@@ -123,21 +141,36 @@ start_branch() {
         base=""
         start_point=$(latest_stable_tag)
         if [ -z "$start_point" ]; then
-            err "there's no release to start a $type branch from yet (no vX.Y.Z tag)."
+            err "there's no release to start a $type branch from yet (no $VFMT tag)."
             return 1
         fi
         ;;
     *)
         base=$(resolve_point "$T_FROM")
         start_point="$base"
-        check_for_branch "$base" || return 1
+        if ! check_for_branch "$base"; then
+            if is_environment "$base"; then
+                info "Create it from $(env_source "$base") with: $(wf_cmd branch promote "$base")"
+            fi
+            return 1
+        fi
         ;;
     esac
 
     prompt="Enter the new $type branch's name:"
-    type_versioned "$type" && prompt="Enter the version (e.g., v1.2.3):"
+    type_versioned "$type" && prompt="Enter the version ($VEX, or major, minor or patch):"
     get_user_input "$name" "$prompt" || return 1
     name="$REPLY"
+    if type_versioned "$type"; then
+        case "$name" in
+        major | minor | patch)
+            name=$(bump_version "$name")
+            latest=$(latest_stable_tag)
+            info "Next $REPLY version: $name${latest:+ (after $latest)}."
+            ;;
+        *) name=$(normalize_version "$name") ;;
+        esac
+    fi
     type_get "$type"
     full="$T_PREFIX$name"
 
@@ -173,6 +206,10 @@ start_branch() {
         pull_branch "$base" || return 1
     fi
     git switch -c "$full" "$start_point" || return 1
+    if type_versioned "$type"; then
+        offer_version_commit "$name" ||
+            note "Set $VERSION_FILE to $name and commit it before $(wf_cmd branch pre)."
+    fi
     git push -u "$REMOTE" "$full"
 }
 
@@ -237,20 +274,19 @@ finish_versioned_checks() {
 }
 
 finish_merge() {
-    local branch="$1" type="$2" version="" into back="" into_before back_before="" tag_target question refs url
+    local branch="$1" type="$2" version="" into back b before="" into_before tag_target question refs url
     type_get "$type"
     into=$(resolve_point "$T_INTO")
-    if [ "$T_BACK" = dev ] && [ "$DEV_BRANCH" != "$into" ]; then
-        back="$DEV_BRANCH"
-    fi
+    back=$(back_targets "$type")
 
+    # shellcheck disable=SC2086 # back is a list
     if type_versioned "$type"; then
         version=$(branch_version "$branch")
         finish_versioned_checks "$branch" "$type" "$version" || return 1
         type_get "$type"
-        question="Merge '$branch' into $into${back:+ and $back}, tag $version, and push?"
+        question="Merge '$branch' into $into${back:+ and $(and_list $back)}, tag $version, and push?"
     else
-        question="Merge '$branch' into $into and push?"
+        question="Merge '$branch' into $into${back:+, then $into into $(and_list $back),} and push?"
     fi
     yes_no "$question" || {
         info "Aborted."
@@ -287,29 +323,34 @@ finish_merge() {
         fi
     fi
     refs="$into"
+    # "<branch> <commit>" pairs for finish_rollback: where each branch was
+    before="$into $into_before"
 
-    # Back-merge, so the release (and its tag) are on the dev branch too
-    if [ -n "$back" ]; then
-        if ! pull_branch "$back"; then
-            finish_rollback "$branch" "$version" "$into" "$into_before" || return 1
-            info "Rolled back; you are on '$branch'. Fix '$back' (see above), then run '$(wf_cmd branch finish)' again."
+    # Back-merge, so the release (and its tag) are on the dev branch too, or
+    # a hotfix to an environment is on every branch above it
+    for b in $back; do
+        # shellcheck disable=SC2086 # before is a list of pairs
+        if ! pull_branch "$b"; then
+            finish_rollback "$branch" "$version" $before || return 1
+            info "Rolled back; you are on '$branch'. Fix '$b' (see above), then run '$(wf_cmd branch finish)' again."
             return 1
         fi
-        back_before=$(git rev-parse "$back")
+        before="$before $b $(git rev-parse "$b")"
 
         if ! git merge --ff-only "$into" 2>/dev/null && ! git merge --no-edit "$into"; then
-            err "back-merge of $into into $back conflicted."
+            err "back-merge of $into into $b conflicted."
+            # shellcheck disable=SC2086 # before is a list of pairs
             if yes_no "Roll back the merge${version:+ and tag} (then fix the cause and run '$(wf_cmd branch finish)' again)?"; then
-                finish_rollback "$branch" "$version" "$into" "$into_before" "$back" "$back_before" || return 1
+                finish_rollback "$branch" "$version" $before || return 1
                 info "Rolled back. You are on '$branch' again."
             else
-                info "Resolve the conflicts on $back and commit, then publish with:"
+                info "Resolve the conflicts on $b and commit, then finish the back-merges by hand and publish with:"
                 info "  git push --atomic $UPSTREAM $into $back${version:+ refs/tags/$version} && $(wf_cmd branch delete "$branch")"
             fi
             return 1
         fi
-        refs="$into $back"
-    fi
+        refs="$refs $b"
+    done
 
     # Everything or nothing. Only this one tag: --tags would publish any stray
     # local tag, and GitHub skips workflow runs when more than three tags
@@ -318,15 +359,17 @@ finish_merge() {
     if ! git push --atomic "$UPSTREAM" $refs ${version:+"refs/tags/$version"}; then
         err "push to '$UPSTREAM' was rejected; nothing was published."
         if [ -z "$version" ]; then
-            finish_rollback "$branch" "" "$into" "$into_before" || return 1
+            # shellcheck disable=SC2086 # before is a list of pairs
+            finish_rollback "$branch" "" $before || return 1
             info "Rolled back; you are on '$branch'. If someone pushed to '$into' first, run '$(wf_cmd branch finish)' again."
             info "If '$into' only accepts pull requests: git config workflow.$type.integrate pr"
             return 1
         fi
         info "Locally, $refs and tag $version are ahead of '$UPSTREAM'. To retry the push:"
         info "  git push --atomic $UPSTREAM $refs refs/tags/$version && $(wf_cmd branch delete "$branch")"
+        # shellcheck disable=SC2086 # before is a list of pairs
         if yes_no "Roll back the local merge and tag instead (then fix the cause and run '$(wf_cmd branch finish)' again)?"; then
-            finish_rollback "$branch" "$version" "$into" "$into_before" "$back" "$back_before" || return 1
+            finish_rollback "$branch" "$version" $before || return 1
             info "Rolled back. You are on '$branch' again."
         fi
         return 1
@@ -334,8 +377,8 @@ finish_merge() {
 
     if [ -n "$version" ]; then
         note "Released '$version'."
-        url=$(actions_url)
-        [ -n "$url" ] && note "Watch the release run: $url  (or: gh run watch)"
+        url=$(ci_hint)
+        [ -n "$url" ] && note "Watch the release run: $url"
     fi
     delete_branch "$branch" || note "Kept branch '$branch'."
 }
@@ -344,16 +387,6 @@ finish_merge() {
 # finish, with integrate=pr: open a pull request; run finish again once it's
 # merged, and it tags (versioned types) and cleans up
 # ---------------------------------------------------------------------------
-
-# Load the forge (workflow.forge) the first time it's needed
-forge_load() {
-    if [ -z "${__WF_FORGE_LOADED:-}" ]; then
-        # shellcheck source=/dev/null # each forge is checked on its own
-        . "$GIT_WORKFLOW_DATADIR/forges/$FORGE.sh" || return 1
-        __WF_FORGE_LOADED=1
-    fi
-    forge_require
-}
 
 # True when <ref>'s changes are already on <into> as different commits: a
 # pull request merged by rebase (each commit has an equivalent) or by squash
@@ -375,16 +408,42 @@ content_merged() {
 # merge_point <tip> <ref>: the commit on <ref>'s first-parent line that brought
 # <tip> in (the merge commit, or <tip> itself after a fast-forward)
 merge_point() {
-    local tip="$1" ref="$2" c last=""
+    local tip="$1" ref="$2" last
     tip=$(git rev-parse "$tip^{commit}") || return 1
-    for c in $(git rev-list --first-parent "$tip..$ref"); do
-        git merge-base --is-ancestor "$tip" "$c" || break
-        last="$c"
-    done
+    last=$(git rev-list --first-parent --ancestry-path "$tip..$ref" | tail -n 1)
     if [ -z "$last" ] || [ "$(git rev-parse "$last^")" = "$tip" ]; then
         last="$tip"
     fi
     printf '%s' "$last"
+}
+
+# back_merge_prs <type> <into> <ref> [version]: after a pull request into
+# <into> merged, open one from <into> into each back-merge target that
+# doesn't have <ref> yet (or show the one that's open)
+back_merge_prs() {
+    local type="$1" into="$2" ref="$3" version="${4:-}" b state what body
+    what="$version"
+    [ -n "$what" ] || what="'$into'"
+    for b in $(back_targets "$type"); do
+        remote_branch_exists "$b" || continue
+        git merge-base --is-ancestor "$ref" "$(remote_ref "$b")" && continue
+        content_merged "$ref" "$(remote_ref "$b")" && continue
+        forge_load || return 1
+        state=$(forge_pr_find "$into" "$UPSTREAM" "$b") || state=""
+        case "$state" in
+        OPEN\ *) note "Bring $what into $b with the open pull request from $into: ${state#* }" ;;
+        *)
+            if [ -n "$version" ]; then
+                body="Back-merge of $version. Merge it with a merge commit, so $b has the release and its tag."
+            else
+                body="Back-merge. Merge it with a merge commit, so $b has what $into has."
+            fi
+            if yes_no "Open a pull request from '$into' into '$b', so ${version:-the change} is on $b too?" "y"; then
+                forge_pr_create "$b" "$into" "$UPSTREAM" "Merge $into into $b${version:+ after $version}" "$body" || return 1
+            fi
+            ;;
+        esac
+    done
 }
 
 # A merged branch: delete it, then bring the dev branch, where deleting the
@@ -400,14 +459,12 @@ finish_cleanup() {
 }
 
 finish_pr() {
-    local branch="$1" type="$2" version="" into into_ref back="" how="" state="" url="" target title body url_actions remote head
+    local branch="$1" type="$2" version="" into into_ref how="" state="" url="" target title body url_actions remote head
     type_get "$type"
     into=$(resolve_point "$T_INTO")
     into_ref=$(remote_ref "$into")
     remote=$(remote_for "$branch")
-    if [ "$T_BACK" = dev ] && [ "$DEV_BRANCH" != "$into" ]; then
-        back="$DEV_BRANCH"
-    fi
+
     if type_versioned "$type"; then
         version=$(branch_version "$branch")
         finish_versioned_checks "$branch" "$type" "$version" || return 1
@@ -455,6 +512,7 @@ finish_pr() {
 
     if [ -n "$how" ] && [ -z "$version" ]; then
         note "'$branch' is merged into '$into_ref'${url:+: $url}"
+        back_merge_prs "$type" "$into" "$branch" || return 1
         finish_cleanup "$branch"
         return
     fi
@@ -491,24 +549,11 @@ finish_pr() {
         }
         tag_and_push "$version" "$target" "$type: $version" || return 1
         note "Released '$version'."
-        url_actions=$(actions_url)
-        [ -n "$url_actions" ] && note "Watch the release run: $url_actions  (or: gh run watch)"
+        url_actions=$(ci_hint)
+        [ -n "$url_actions" ] && note "Watch the release run: $url_actions"
 
         # Back-merge through a pull request too
-        if [ -n "$back" ] && remote_branch_exists "$back" &&
-            ! git merge-base --is-ancestor "$target" "$(remote_ref "$back")"; then
-            forge_load || return 1
-            state=$(forge_pr_find "$into" "$UPSTREAM") || state=""
-            case "$state" in
-            OPEN\ *) note "Bring $version into $back with the open pull request from $into: ${state#* }" ;;
-            *)
-                if yes_no "Open a pull request from '$into' into '$back', so $version is on $back too?" "y"; then
-                    forge_pr_create "$back" "$into" "$UPSTREAM" "Merge $into into $back after $version" \
-                        "Back-merge of $version. Merge it with a merge commit, so $back has the release and its tag." || return 1
-                fi
-                ;;
-            esac
-        fi
+        back_merge_prs "$type" "$into" "$target" "$version" || return 1
         finish_cleanup "$branch"
         return
     fi
@@ -553,7 +598,26 @@ finish_pr() {
 }
 
 finish_branch() {
-    local branch="${1:-$working_branch}" type
+    local branch="" type b
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -y | --yes) ASSUME_YES=1 ;;
+        -*)
+            err "unknown option: $1. usage: $(wf_cmd branch finish "[branch] [-y]")"
+            return 1
+            ;;
+        *)
+            if [ -n "$branch" ]; then
+                err "too many arguments. usage: $(wf_cmd branch finish "[branch] [-y]")"
+                return 1
+            fi
+            branch="$1"
+            ;;
+        esac
+        shift
+    done
+    branch="${branch:-$working_branch}"
 
     if [ -z "$branch" ]; then
         err "not on a branch; pass the branch to finish."
@@ -572,6 +636,11 @@ finish_branch() {
         err "'$branch' isn't a branch of any type in the $WF_FLOW flow ($(types_list))."
         return 1
     fi
+    # An environment it goes into, or merges back into
+    type_get "$type"
+    for b in $(resolve_point "$T_INTO") $(back_targets "$type"); do
+        check_for_branch "$b" || return 1
+    done
 
     pull_branch "$branch" || return 1
 
@@ -593,7 +662,7 @@ unmerged_commits() {
     if [ -n "$WF_MERGED_HEAD" ] && git merge-base --is-ancestor "$ref" "$WF_MERGED_HEAD" 2>/dev/null; then
         return 0
     fi
-    for b in "$MAIN_BRANCH" "$DEV_BRANCH"; do
+    for b in "$MAIN_BRANCH" "$DEV_BRANCH" $ENVIRONMENTS; do
         for r in "refs/heads/$b" "refs/remotes/$(remote_ref "$b")"; do
             git rev-parse --verify --quiet "$r" >/dev/null && keep="$keep $r"
         done
@@ -611,13 +680,15 @@ unmerged_commits() {
     printf '%s\n' "$left"
 }
 
-# "next or main", or just "main" when they're the same
+# "next or main", or just "main" when they're the same, and the environments
 merge_targets() {
-    if [ "$DEV_BRANCH" = "$MAIN_BRANCH" ]; then
-        printf '%s' "$MAIN_BRANCH"
-    else
-        printf '%s or %s' "$DEV_BRANCH" "$MAIN_BRANCH"
-    fi
+    local b out=""
+    for b in "$DEV_BRANCH" "$MAIN_BRANCH" $ENVIRONMENTS; do
+        case " $out " in *" $b "*) continue ;; esac
+        out="${out:+$out }$b"
+    done
+    # shellcheck disable=SC2086 # a list
+    and_list $out | sed 's/ and / or /'
 }
 
 # delete [branch] [-y] [-f]
@@ -628,7 +699,13 @@ delete_branch() {
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -y | --yes | --y | -d | --d | --delete) no_prompt=1 ;;
+        -y | --yes) no_prompt=1 ;;
+        --y | -d | --d | --delete)
+            # 1.x spellings. -d reads as git branch -d (delete if merged),
+            # the opposite of "don't ask"
+            warn "'$1' is deprecated and goes away in v4; use -y, or --yes."
+            no_prompt=1
+            ;;
         -f | --force | -D) force=1 ;;
         -*)
             err "unknown option: $1. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
@@ -639,7 +716,10 @@ delete_branch() {
                 branch="$1"
             else
                 case "$1" in
-                y | yes | d) no_prompt=1 ;;
+                y | yes | d)
+                    warn "'$1' after the branch name is deprecated and goes away in v4; use -y, or --yes."
+                    no_prompt=1
+                    ;;
                 *)
                     err "too many arguments. usage: $(wf_cmd branch delete "[branch] [-y] [-f]")"
                     return 1
@@ -710,15 +790,29 @@ delete_branch() {
     info "Branch $branch deleted. You're on $(get_working_branch)."
 }
 
-# show_config [--types]: the effective settings, and where each came from.
-# --types prints only the branch type names (for tab completion).
+# show_config [--types | --versioned-types]: the effective settings, and
+# where each came from. --types prints only the branch type names, and
+# --versioned-types the ones named by version (for tab completion).
 show_config() {
-    local t from into how tag extra
-    if [ "${1:-}" = --types ]; then
+    local t from into how tag extra back
+    case "${1:-}" in
+    --types)
         # shellcheck disable=SC2086 # a list
         printf '%s\n' $WF_TYPES
         return 0
-    fi
+        ;;
+    --versioned-types)
+        for t in $WF_TYPES; do
+            type_versioned "$t" && printf '%s\n' "$t"
+        done
+        return 0
+        ;;
+    --environments)
+        # shellcheck disable=SC2086 # a list
+        [ -z "$ENVIRONMENTS" ] || printf '%s\n' $ENVIRONMENTS
+        return 0
+        ;;
+    esac
 
     cat <<EOF
 git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
@@ -729,11 +823,13 @@ git-workflow settings (git config workflow.<key>, or a .gitworkflow file):
   releaseFromMain  $RELEASE_FROM_MAIN$(__cfg_src releasefrommain)
   remote           $REMOTE$(__cfg_src remote)
   upstream         $UPSTREAM$(__cfg_src upstream)
-  forge            $FORGE$(__cfg_src forge)
+  forge            $FORGE${FORGE_WHY:+  ($FORGE_WHY)}
   prereleaseLabel  $PRERELEASE_LABEL$(__cfg_src prereleaselabel)
   strict           $STRICT$(__cfg_src strict)
   versionFile      ${VERSION_FILE:-(disabled)}$(__cfg_src versionfile)
-  protected        $MAIN_BRANCH$([ "$DEV_BRANCH" != "$MAIN_BRANCH" ] && printf ' %s' "$DEV_BRANCH")${EXTRA_PROTECTED}
+  tagPrefix        ${TAG_PREFIX:-(none)}$(__cfg_src tagprefix)
+  environments     ${ENVIRONMENTS:-(none)}$(__cfg_src environments)
+  protected        $MAIN_BRANCH$([ "$DEV_BRANCH" != "$MAIN_BRANCH" ] && printf ' %s' "$DEV_BRANCH")${ENVIRONMENTS:+ $ENVIRONMENTS}${EXTRA_PROTECTED}
 EOF
     [ -n "$WF_REPO_FILE" ] && printf '  repository file  %s\n' "$WF_REPO_FILE"
 
@@ -747,11 +843,13 @@ EOF
         [ "$T_INTEGRATE" = pr ] && how="pull request"
         tag=""
         case "$T_TAG" in
-        merge) tag=", tags vX.Y.Z on the merge" ;;
-        tip) tag=", tags vX.Y.Z on its tested tip" ;;
+        merge) tag=", tags $VFMT on the merge" ;;
+        tip) tag=", tags $VFMT on its tested tip" ;;
         esac
         extra=""
-        [ "$T_BACK" = dev ] && [ "$DEV_BRANCH" != "$into" ] && extra="$extra, merged back into $DEV_BRANCH"
+        back=$(back_targets "$t")
+        # shellcheck disable=SC2086 # a list
+        [ -n "$back" ] && extra="$extra, merged back into $(and_list $back)"
         [ "$T_SINGLE" = true ] && extra="$extra, one at a time"
         printf '  %-9s %-11s from %s into %s by %s%s%s\n' "$t" "${T_PREFIX:-(no prefix)}" \
             "$from" "$into" "$how" "$tag" "$extra"
