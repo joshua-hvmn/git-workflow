@@ -75,7 +75,9 @@ COMPLETION	:= completion/$(NAME).bash
 ZSH_COMPLETION	:= completion/_$(NAME)
 FISH_COMPLETION	:= completion/$(NAME).fish
 SHFMT_FLAGS	:= -i 4
-SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh share/forges/*.sh) $(COMPLETION) tests/test_helper.bash
+# packaging/ isn't in release tarballs, so it's linted only where it's there
+PACKAGING	:= $(wildcard packaging/render)
+SHELL_FILES	:= $(PROGRAM) $(wildcard share/*.sh share/commands/*.sh share/forges/*.sh) $(COMPLETION) $(PACKAGING) tests/test_helper.bash
 
 # What 1.x installed and 2.0 doesn't: the git-* commands, their libraries
 # (in DATADIR since 1.4.2, in PREFIX/lib/git-workflow before), the alias file
@@ -288,8 +290,8 @@ unlink: ## Remove that symlink (only if it points into this checkout)
 	$(Q)$(unlink_1x)
 
 lint: ## Shellcheck the code and tests, check their formatting (shfmt), check the zsh and fish completion, lint the man pages
-	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)"
-	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION)
+	@$(say) LINT "$(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION) $(PACKAGING)"
+	$(Q)$(SHELLCHECK) -x -P share $(PROGRAM) share/*.sh share/commands/*.sh share/forges/*.sh $(COMPLETION) $(PACKAGING)
 	@$(say) LINT "tests/*"
 	$(Q)$(SHELLCHECK) -s bash tests/test_helper.bash
 	$(Q)$(SHELLCHECK) tests/*.bats

@@ -38,6 +38,9 @@
   hosts too once `workflow.forge` is `github`, and GitLab pipelines.
 - **zsh and fish completion**, installed into `ZSHCOMPDIR` (zsh's `site-functions`) and
   `FISHCONFDIR` (fish's `vendor_conf.d`), aliases included.
+- Every stable release carries an AUR `PKGBUILD` and a Homebrew formula, filled in with its
+  version and the tarball's hash and signed with the release key, ready to publish as they are.
+  CI checks the PKGBUILD with `makepkg --printsrcinfo` and `namcap` on every push.
 - `docs/`: configuration, releasing, and the design notes; and `docs/demo.tape`, a recording
   script for [vhs](https://github.com/charmbracelet/vhs).
 
@@ -49,6 +52,8 @@
   and a `.gitworkflow` can set it.
 - The README leads with what git-workflow is for and how it compares; the reference moved to
   `docs/`.
+- `packaging/` holds templates (`aur/PKGBUILD.in`, `homebrew/git-workflow.rb.in`) and
+  `packaging/render`, not recipes for one release: they built v2.0.0 until now.
 - `make test`, `make check` and `make installcheck` run the suite in parallel, `JOBS` tests at a
   time (three per CPU), when GNU parallel is installed; `JOBS=1` runs it in order. Each test
   copies a fixture built once per file instead of building its own, which halves what a test

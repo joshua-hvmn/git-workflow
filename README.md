@@ -300,8 +300,9 @@ overridden individually.
 `make install` never touches `$HOME` or `~/.gitconfig`, and removes 1.x files from the same
 `PREFIX`. Release tarballs include the tests.
 
-[`packaging/`](packaging/) has an AUR `PKGBUILD` and a Homebrew formula built this way, and
-how to publish each.
+Every stable release's page has an AUR `PKGBUILD` and a Homebrew formula built this way,
+filled in with its version and the tarball's hash, and signed. [`packaging/`](packaging/) has
+their templates, and how to publish each.
 
 ## Development
 
