@@ -77,6 +77,11 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
+      # Without git, actions/checkout downloads an archive, which leaves out
+      # packaging/ (see .gitattributes)
+      - name: Install git and namcap
+        run: pacman -Syu --noconfirm --needed git namcap
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -89,7 +94,6 @@ jobs:
       # makepkg won't run as root, which is what the container runs as
       - name: makepkg --printsrcinfo and namcap
         run: |
-          pacman -Syu --noconfirm --needed namcap
           useradd --create-home builder
           chown -R builder /tmp/recipes
           cd /tmp/recipes
