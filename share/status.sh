@@ -8,8 +8,9 @@
 # Modify & distribute freely.
 #
 # `git workflow branch status`: where you are in the flow and what comes
-# next, the open branches of each type, and what's been left half done (a
-# merged release that was never tagged, a prerelease never released).
+# next, the open branches of each type, the environment branches, and what's
+# been left half done (a merged release that was never tagged, a hotfix not
+# merged back, a prerelease never released).
 
 # Include guard to prevent redundant parsing
 if [ -n "${__WF_STATUS_LOADED:-}" ]; then
@@ -17,18 +18,9 @@ if [ -n "${__WF_STATUS_LOADED:-}" ]; then
 fi
 __WF_STATUS_LOADED=1
 
-if [ -z "${__WF_FLOW_LOADED:-}" ]; then
-    . "$GIT_WORKFLOW_DATADIR/flow.sh"
+if [ -z "${__WF_PROMOTE_LOADED:-}" ]; then
+    . "$GIT_WORKFLOW_DATADIR/promote.sh"
 fi
-
-# "1 commit", "3 commits"
-__commits() {
-    if [ "$1" -eq 1 ]; then
-        printf '1 commit'
-    else
-        printf '%s commits' "$1"
-    fi
-}
 
 # merged_into <branch> <ref>: how <branch> got into <ref>: "commit" (its
 # commits are there), "changes" (squashed or rebased), or nothing. A branch
@@ -53,11 +45,12 @@ __unprefixed_branches() {
         is_protected_branch "$b" && continue
         [ "$(branch_type "$b")" = "$type" ] && printf '%s\n' "$b"
     done
+    return 0
 }
 
 # What finish does with a branch of <type>, in words
 __finish_does() {
-    local type="$1" version="$2" into
+    local type="$1" version="$2" into back
     type_get "$type"
     into=$(resolve_point "$T_INTO")
     if [ "$T_INTEGRATE" = pr ]; then
@@ -66,10 +59,27 @@ __finish_does() {
     fi
     printf 'merges it into %s' "$into"
     [ -n "$version" ] && printf ', tags %s' "$version"
-    if [ "$T_BACK" = dev ] && [ "$DEV_BRANCH" != "$into" ]; then
-        printf ', merges %s back into %s' "$into" "$DEV_BRANCH"
-    fi
+    back=$(back_targets "$type")
+    # shellcheck disable=SC2086 # a list
+    [ -n "$back" ] && printf ', merges %s back into %s' "$into" "$(and_list $back)"
     printf ' and pushes'
+}
+
+# "3 commits behind main: git b promote staging", and the like
+__env_line() {
+    local env="$1" src
+    src=$(env_source "$env")
+    if ! env_state "$env" "$src"; then
+        printf "%s isn't on '%s' yet" "$src" "$UPSTREAM"
+    elif [ -n "$ENV_MISSING" ]; then
+        printf "not on '%s' yet: %s" "$UPSTREAM" "$(wf_cmd branch promote "$env")"
+    elif [ -n "$ENV_OWN" ]; then
+        printf "has changes %s doesn't: merge %s into %s" "$src" "$env" "$src"
+    elif [ "$ENV_BEHIND" -eq 0 ]; then
+        printf 'up to date with %s' "$src"
+    else
+        printf '%s behind %s: %s' "$(count_commits "$ENV_BEHIND")" "$src" "$(wf_cmd branch promote "$env")"
+    fi
 }
 
 # The current branch: what it is, how far along, and the next step
@@ -89,6 +99,11 @@ __status_current() {
             printf 'On %s, the main branch.\n' "$branch"
         elif [ "$branch" = "$DEV_BRANCH" ]; then
             printf 'On %s, the dev branch.\n' "$branch"
+        elif is_environment "$branch"; then
+            printf 'On %s, an environment branch: %s.\n' "$branch" "$(__env_line "$branch")"
+            printf '  Changes come from %s, through %s; hotfixes start from %s.\n' \
+                "$(env_source "$branch")" "$(wf_cmd branch promote "$branch")" "${ENVIRONMENTS##* }"
+            return 0
         else
             printf 'On %s, a protected branch.\n' "$branch"
         fi
@@ -128,7 +143,7 @@ __status_current() {
     if [ "$own" -eq 0 ]; then
         own="No commits of its own yet"
     else
-        own="$(__commits "$own") of its own"
+        own="$(count_commits "$own") of its own"
     fi
     if ! remote_branch_exists "$branch"; then
         unpushed="not on '$(remote_for "$branch")' yet"
@@ -150,7 +165,7 @@ __status_current() {
             last=$(prerelease_tags_for "$version" | tail -n 1)
             after=$(git rev-list --count "$last..$branch")
             if [ "$after" -gt 0 ]; then
-                printf '  Prereleases: %s (%s after %s).\n' "$pres" "$(__commits "$after")" "$last"
+                printf '  Prereleases: %s (%s after %s).\n' "$pres" "$(count_commits "$after")" "$last"
             else
                 printf '  Prereleases: %s (the tip is %s).\n' "$pres" "$last"
             fi
@@ -212,12 +227,23 @@ __status_open() {
     [ -n "$any" ] || printf '  none\n'
 }
 
+# The environment branches, each against the one before it
+__status_envs() {
+    local e
+    [ -n "$ENVIRONMENTS" ] || return 0
+    printf '\nEnvironments (%s -> %s):\n' "$MAIN_BRANCH" "${ENVIRONMENTS// / -> }"
+    for e in $ENVIRONMENTS; do
+        printf '  %-12s %s\n' "$e" "$(__env_line "$e")"
+    done
+}
+
 # What's been left half done
 __status_attention() {
-    local out="" t b version into_ref ref version_tag
+    local out="" t b version into_ref ref version_tag back lacking list
     for t in $WF_TYPES; do
         type_get "$t"
         into_ref=$(remote_ref "$(resolve_point "$T_INTO")")
+        back=$(back_targets "$t")
         if type_versioned "$t"; then
             # A versioned branch merged (with a merge commit) but never tagged:
             # finish wasn't run again after its pull request merged
@@ -229,12 +255,30 @@ __status_attention() {
                 [ "$(merged_into "$ref" "$into_ref")" = commit ] || continue
                 out="$out  $b is merged into $into_ref, but $version_tag isn't tagged: $(wf_cmd branch finish "$b")$__NL"
             done
-        elif [ -z "$T_PREFIX" ]; then
-            # Merged local branches that are still around
-            for b in $(__unprefixed_branches "$t"); do
+        else
+            # Merged branches that are still around: not merged back yet
+            # (finish again does it), or just not deleted
+            if [ -n "$T_PREFIX" ]; then
+                list=$(branches_of_type "$t") || list=""
+            else
+                list=$(__unprefixed_branches "$t") || list=""
+            fi
+            for b in $list; do
                 [ "$b" = "$working_branch" ] && continue
-                [ -n "$(merged_into "$b" "$into_ref")" ] || continue
-                out="$out  $b is merged into $into_ref: $(wf_cmd branch delete "$b")$__NL"
+                ref="refs/heads/$b"
+                git rev-parse --verify --quiet "$ref" >/dev/null || ref="refs/remotes/$(remote_ref "$b")"
+                [ -n "$(merged_into "$ref" "$into_ref")" ] || continue
+                lacking=""
+                for version_tag in $back; do
+                    remote_branch_exists "$version_tag" || continue
+                    [ -n "$(merged_into "$ref" "$(remote_ref "$version_tag")")" ] || lacking="$lacking $version_tag"
+                done
+                if [ -n "$lacking" ]; then
+                    # shellcheck disable=SC2086 # a list
+                    out="$out  $b is merged into $into_ref, but not back into $(and_list $lacking): $(wf_cmd branch finish "$b")$__NL"
+                else
+                    out="$out  $b is merged into $into_ref: $(wf_cmd branch delete "$b")$__NL"
+                fi
             done
         fi
     done
@@ -247,6 +291,15 @@ __status_attention() {
     if [ -n "$out" ]; then
         printf '\nLeft to do:\n%s' "$out"
     fi
+}
+
+# True when some branch type finishes with a tag
+__has_versioned_types() {
+    local t
+    for t in $WF_TYPES; do
+        type_versioned "$t" && return 0
+    done
+    return 1
 }
 
 # show_status [--no-fetch]
@@ -266,17 +319,22 @@ show_status() {
 
     latest=$(latest_stable_tag)
     if [ "$DEV_BRANCH" != "$MAIN_BRANCH" ]; then
-        printf '%s flow: %s and %s; ' "$WF_FLOW" "$MAIN_BRANCH" "$DEV_BRANCH"
+        printf '%s flow: %s and %s' "$WF_FLOW" "$MAIN_BRANCH" "$DEV_BRANCH"
+    elif [ -n "$ENVIRONMENTS" ]; then
+        printf '%s flow: %s -> %s' "$WF_FLOW" "$MAIN_BRANCH" "${ENVIRONMENTS// / -> }"
     else
-        printf '%s flow: %s; ' "$WF_FLOW" "$MAIN_BRANCH"
+        printf '%s flow: %s' "$WF_FLOW" "$MAIN_BRANCH"
     fi
     if [ -n "$latest" ]; then
-        printf 'latest release %s.\n\n' "$latest"
+        printf '; latest release %s.\n\n' "$latest"
+    elif [ "$RELEASE_FROM_MAIN" = true ] || __has_versioned_types; then
+        printf '; no releases yet.\n\n'
     else
-        printf 'no releases yet.\n\n'
+        printf '.\n\n'
     fi
 
     __status_current
     __status_open
+    __status_envs
     __status_attention
 }

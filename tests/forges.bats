@@ -125,6 +125,19 @@ fake_glab() {
     [ "$(cat "$GL_LOG")" = "mr create -s foo -b main --head https://gitlab.com/me/proj --fill -y --push=false -R https://gitlab.com/up/proj" ]
 }
 
+@test "gitlab: promote opens a merge request from the environment before" {
+    gitlab_remote
+    fake_glab
+    git config workflow.flow gitlab
+    git push -q origin main:staging main:production
+    remote_commit main b
+    git fetch -q origin
+
+    run git b promote staging <<<"y"
+    [ "$status" -eq 0 ]
+    [[ "$(cat "$GL_LOG")" == "mr create -s main -b staging -t Promote main to staging -d Moves staging to what main has, up to "*" -y --push=false -R https://gitlab.com/up/proj" ]]
+}
+
 @test "gitlab: without glab, finish says what to install" {
     command -v glab >/dev/null 2>&1 && skip "glab is installed here"
     gitlab_remote

@@ -58,7 +58,7 @@ _git_workflow() {
         if [ "$n" -eq 1 ]; then
             case "$cur" in
             -*) _git_branch ;; # options go to git branch
-            *) __gitcomp "start pre prerelease release finish delete status config help version" ;;
+            *) __gitcomp "start pre prerelease release finish delete promote status config help version" ;;
             esac
             return
         fi
@@ -102,6 +102,17 @@ _git_workflow() {
         release)
             case "$cur" in
             -*) __gitcomp "--dry-run --yes" ;;
+            esac
+            ;;
+        promote)
+            case "$cur" in
+            -*) __gitcomp "--dry-run --yes" ;;
+            *)
+                if [ "$n" -eq 2 ]; then
+                    # This repository's environment branches
+                    __gitcomp "$(__git workflow branch config --environments 2>/dev/null)"
+                fi
+                ;;
             esac
             ;;
         status)

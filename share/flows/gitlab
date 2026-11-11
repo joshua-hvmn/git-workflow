@@ -1,0 +1,26 @@
+# git-workflow flow: GitLab flow, with environment branches
+#
+# Work goes into main through pull requests (merge requests on GitLab), and
+# moves down a chain of environment branches, main -> staging -> production,
+# with `git workflow branch promote`. Each one gets exactly what the one
+# before it tested. A hotfix starts from production, goes into it, and is
+# merged back up the chain.
+#
+# A flow is plain data in git-config format, read with the same keys as
+# `git config workflow.*`; see "Flows" in git-workflow(1). Name your own
+# environments in a repository's .gitworkflow or git config:
+#   git config workflow.environments "pre-production production"
+[workflow]
+    description = GitLab flow: main, then environment branches you promote to
+    environments = staging production
+
+[workflow "topic"]
+    from = main
+    into = main
+
+# hotfix/<name>: a fix to what's live, merged back into staging and main
+[workflow "hotfix"]
+    prefix = hotfix/
+    from = last-environment
+    into = last-environment
+    backMerge = upstream

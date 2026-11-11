@@ -114,6 +114,15 @@ require_git_completion() {
     [ "$output" = "--show-current" ]
 }
 
+@test "completion: promote offers the environment branches" {
+    require_git_completion
+    git config workflow.flow gitlab
+    run complete "git b promote "
+    [ "$output" = $'staging\nproduction' ]
+    run complete "git b prom"
+    [ "$output" = "promote" ]
+}
+
 @test "completion: start offers major, minor and patch for a versioned type, and -y" {
     require_git_completion
     git switch -q next
@@ -169,6 +178,9 @@ fish_complete() {
     [ "$output" = $'major\nminor\npatch' ]
     run zsh_complete "git b finish "
     [[ "$output" == *next* ]]
+    git config workflow.flow gitlab
+    run zsh_complete "git b promote "
+    [ "$output" = $'production\nstaging' ]
 }
 
 @test "fish: commands, subcommands, branch types and versions, through an alias too" {
@@ -187,4 +199,7 @@ fish_complete() {
     [[ "$output" == *--yes* ]]
     run fish_complete "git sync "
     [[ "$output" == *next* ]]
+    git config workflow.flow gitlab
+    run fish_complete "git b promote "
+    [ "$output" = $'production\nstaging' ]
 }
