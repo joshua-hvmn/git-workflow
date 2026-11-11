@@ -1,0 +1,19 @@
+# Homebrew formula template: packaging/render fills in the version and the
+# tarball's sha256, and every stable release's page has the result as
+# git-workflow.rb (with git-workflow.rb.sig). A tap takes that file as its
+# Formula/git-workflow.rb. See packaging/README.md.
+class GitWorkflow < Formula
+  desc "Git flow, GitHub flow or GitLab flow, with guardrails and SemVer prereleases" 
+  homepage "https://github.com/joshua-hvmn/git-workflow"
+  url "https://github.com/joshua-hvmn/git-workflow/releases/download/v@VERSION@/git-workflow-v@VERSION@.tar.gz"
+  sha256 "@SHA256@"
+  license "MIT"
+
+  def install
+    system "make", "install", "PREFIX=#{prefix}"
+  end
+
+  test do
+    assert_match "git-workflow v#{version}", shell_output("#{bin}/git-workflow version")
+  end
+end

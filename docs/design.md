@@ -114,6 +114,18 @@ cheapest to most expensive:
 The second step is easy to forget, so `git b status` lists a versioned branch that's merged
 but not tagged.
 
+## Recipes ship with the release
+
+A packaging recipe has to name the tarball's sha256, and that can't be known before the
+release: `git archive` writes the release commit's ID into the tarball, so the hash depends on
+the very commit the recipe would be in. Rather than a recipe on `main` that's always one
+release behind, or CI committing to a branch that only holds releases, the release workflow
+renders the recipes from templates (`packaging/render`) and attaches them to the release. Each
+recipe sits next to the exact tarball it builds, signed with the same key, and travels from the
+build job to the signing job checked against a hash passed as a job output, like the tarball.
+Publishing them stays with whoever maintains each package: git-workflow never holds an AUR key
+or a tap's token.
+
 ## Questions and guardrails
 
 There are two kinds of prompt. A question ("Push 1 local commit first?") confirms something

@@ -62,6 +62,9 @@ Designed to feed a tag-triggered release workflow. This repo releases itself wit
 - release notes come from the matching `## vX.Y.Z` section of `CHANGELOG.md`
 - the publish job checks the tarball against the hash the build job computed, so a tarball
   that changed in artifact storage is never signed
+- a stable release also carries an AUR `PKGBUILD` and a Homebrew formula, filled in with its
+  version and the tarball's hash by `packaging/render`, checked the same way, and signed
+  ([packaging](../packaging/README.md)); a copy elsewhere can drop the "Packaging recipes" step
 
 The publish job runs in a `release` environment, so a copy of the workflow needs one
 (Settings → Environments), with:
@@ -77,7 +80,9 @@ signature, and warns 60 days before the key expires.
 
 ## Verifying a release
 
-Every release tarball is signed, and its build provenance is attested by GitHub.
+Every release tarball is signed, and its build provenance is attested by GitHub. A stable
+release's `PKGBUILD` and `git-workflow.rb` are signed with the same key:
+`gpg --verify PKGBUILD.sig PKGBUILD`.
 
 **Primary key**, the one to trust (confirm it somewhere other than this repository):
 
@@ -88,6 +93,7 @@ Every release tarball is signed, and its build provenance is attested by GitHub.
 **Signing subkey**, used only for this repository's releases:
 
 ```
+ README.md                    |  23 ++++--
 1CEA A8B4 D3B8 749E B348  9943 AEA6 4E97 7A5B 316A
 ```
 
