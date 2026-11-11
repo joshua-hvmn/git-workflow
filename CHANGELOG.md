@@ -4,11 +4,21 @@
 
 ### Added
 
+- **GitLab flow** (`share/flows/gitlab`, picked with `workflow.flow gitlab`): topics into `main`,
+  and a chain of environment branches, `main → staging → production`. **`git b promote`** moves
+  an environment up to the branch before it, so it gets exactly what that one tested: a
+  fast-forward (or a merge commit with the tested tree) when merging locally, or a pull request.
+  An environment with changes its source doesn't have is refused. Hotfixes start from
+  `production`, go into it, and are merged back into `staging` and `main`.
+- Branch types can start from and finish into environments (`from`/`into` take an environment's
+  name, or `last-environment`), and `backMerge = upstream` merges into each branch above the
+  target. `workflow.environments` names a repository's own.
 - **`git b status`**: the flow and the latest release; the current branch, its commits, its
   prereleases (and the commits after the last one), its pull request, and the command to run
-  next; the open branches of each type; and what's left to do: a release merged but never
-  tagged (`finish` wasn't run again after its pull request merged), a merged topic still around,
-  a prerelease of `main` never released. `--no-fetch` skips the fetch.
+  next; the open branches of each type; the environment branches; and what's left to do: a
+  release merged but never tagged (`finish` wasn't run again after its pull request merged), a
+  hotfix not merged back, a merged topic still around, a prerelease of `main` never released.
+  `--no-fetch` skips the fetch.
 - **Versions beyond `vX.Y.Z` and `VERSION`.** `workflow.tagPrefix` (default `v`) is what comes
   before `X.Y.Z` in tags and branch names: `""` for `1.2.3`, `pkg-a/v` for one package of a
   monorepo. `workflow.versionFile` reads `package.json`, `Cargo.toml` (`[package]`, else
@@ -17,9 +27,9 @@
 - **`git b start release minor`** (`major`, `patch`) starts the next version after the latest
   release, and a version typed without its `v` gets one. On a new release or hotfix branch,
   `start` offers to set the version file and commit it, keeping how the file writes it.
-- **`-y`** for `start`, `pre`, `release` and `finish`: answer their questions with yes, so they
-  can run from a script. Flow warnings still ask (or abort without a terminal, or in strict
-  mode).
+- **`-y`** for `start`, `pre`, `release`, `finish` and `promote`: answer their questions with
+  yes, so they can run from a script. Flow warnings still ask (or abort without a terminal, or
+  in strict mode).
 - **A GitLab forge** (`share/forges/gitlab.sh`, with `glab` and `jq`), used unless
   `workflow.forge` says otherwise when the upstream remote's URL says gitlab. Merge requests
   from a fork name it as their head project.

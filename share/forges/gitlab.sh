@@ -59,18 +59,19 @@ __gl_pick() {
     esac
 }
 
-# __gl_list <branch> <remote> <state flag> <jq for the picked one>
+# __gl_list <branch> <remote> <state flag> <jq for the picked one> [<target>]
 __gl_list() {
     local repo out
     repo=$(__gl_project "$UPSTREAM")
     # Not a pipe: a failing glab must fail here, not hand jq nothing
-    out=$(glab mr list ${repo:+-R "$repo"} "$3" -s "$1" -o created_at -S desc -P 30 -F json) || return 1
+    out=$(glab mr list ${repo:+-R "$repo"} "$3" -s "$1" ${5:+-t "$5"} -o created_at -S desc -P 30 -F json) || return 1
     printf '%s' "$out" | jq -r "$(__gl_pick "$2") | if . == null then empty else $4 end"
 }
 
 forge_pr_find() {
     __gl_list "$1" "$2" --all \
-        '(if .state == "opened" then "OPEN" elif .state == "merged" then "MERGED" else "CLOSED" end) + " " + .web_url'
+        '(if .state == "opened" then "OPEN" elif .state == "merged" then "MERGED" else "CLOSED" end) + " " + .web_url' \
+        "${3:-}"
 }
 
 # A merge commit, or with squash and fast-forward merges, the squashed (or

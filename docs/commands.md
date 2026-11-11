@@ -14,11 +14,12 @@ What each command does, in detail. `git workflow help <command>` opens its manua
 | `git b release [vX.Y.Z] [-n]`                    | GitHub flow: tag the newest prerelease's commit as the release              |
 | `git b finish [branch]`                          | open a pull request, or merge per the flow; tag releases/hotfixes; clean up |
 | `git b delete [branch] [-y] [-f]`                | delete locally and on the remote                                            |
+| `git b promote [environment] [-n]`               | GitLab flow: move an environment branch up to the one before it             |
 | `git b status [--no-fetch]`                      | where you are in the flow, what to run next, and what's left to do          |
 | `git b config` / `git b help`                    | the flow and settings / usage                                               |
 | `git workflow version`                           | installed version (from `VERSION`)                                          |
 
-`start`, `pre`, `release` and `finish` take `-y`: they answer their own questions with yes,
+`start`, `pre`, `release`, `finish` and `promote` take `-y`: they answer their own questions with yes,
 printing each one, so they can run from a script. A flow warning isn't one of those questions:
 it still asks, and stops without a terminal or with `workflow.strict`. `-y` means "I meant
 this", not "skip the guardrails".
@@ -34,7 +35,7 @@ from where the type says. In the shipped flows:
 - **topic**: from `devBranch` (`main` in GitHub flow)
 - **release** (git flow): `release/vX.Y.Z` from `devBranch` (version validated against existing tags)
 - **hotfix**: `hotfix/vX.Y.Z` from `mainBranch` (in GitHub flow, from the latest release tag:
-  `main` already has unreleased work)
+  `main` already has unreleased work; in GitLab flow, `hotfix/<name>` from `production`)
 
 Tracked edits come along to the new branch, the same as `git switch -c`. A name that already
 exists locally or on the remote is refused. On a fresh clone, a missing local `main` or
@@ -119,6 +120,15 @@ name. It checks everything before switching or deleting anything: a branch with 
 aren't merged into main or dev needs `-f`. A branch whose pull request was squash- or
 rebase-merged counts as merged. Protected branches are never deleted.
 
+### promote
+
+`git b promote [environment]` (GitLab flow) moves an environment branch up to the branch before
+it in the chain, `main → staging → production`: the first one that's behind, or the one you
+name. It fast-forwards and pushes when merging locally, or opens a pull request, and refuses an
+environment that has changes its source doesn't, since the result would be untested.
+`-n` shows what would move. [Environment branches](configuration.md#environment-branches-and-promote)
+has the details.
+
 ### status
 
 `git b status` says where you are in the flow and what to run next, which branches are open,
@@ -143,8 +153,9 @@ Left to do:
 
 With pull requests, a release is tagged when `finish` runs again after its pull request
 merged. A release branch that was merged but never tagged shows up under "Left to do", and so
-does a merged branch that's still around, and (in GitHub flow) a prerelease of `main` that was
-never released. `status` fetches first, unless `--no-fetch`, and asks the forge only about the
+does a merged branch that's still around, a hotfix merged into production but not back, and (in
+GitHub flow) a prerelease of `main` that was never released. In GitLab flow it also lists each
+environment against the one before it. `status` fetches first, unless `--no-fetch`, and asks the forge only about the
 current branch, and only when git can't tell it was merged.
 
 ## Other commands

@@ -107,6 +107,7 @@ function __git_workflow_complete
                     release "tag the newest prerelease's commit as the release" \
                     finish 'integrate per the flow: merge, or open a pull request' \
                     delete 'delete a branch locally and on the remote' \
+                    promote 'move an environment branch up to the one before it' \
                     status "where you are in the flow and what's next" \
                     config 'the flow and its settings' \
                     help usage \
@@ -140,6 +141,12 @@ function __git_workflow_complete
                     test $option -eq 1; and printf '%s\n' --dry-run --list --yes
                 case release
                     test $option -eq 1; and printf '%s\n' --dry-run --yes
+                case promote
+                    if test $option -eq 1
+                        printf '%s\n' --dry-run --yes
+                    else if test $n -eq 2
+                        git workflow branch config --environments 2>/dev/null
+                    end
                 case status
                     test $option -eq 1; and echo --no-fetch
             end

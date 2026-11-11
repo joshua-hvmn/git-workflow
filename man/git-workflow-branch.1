@@ -1,4 +1,4 @@
-.TH GIT-WORKFLOW-BRANCH 1 2026-11-06 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW-BRANCH 1 2026-11-10 git-workflow "git-workflow manual"
 .SH NAME
 git-workflow-branch \- start, prerelease, release, finish, delete and show
 branches following the flow
@@ -31,11 +31,16 @@ branches following the flow
 .RB [ \-y ]
 .RB [ \-f ]
 .br
+.B git workflow branch promote
+.RI [ environment ]
+.RB [ \-n ]
+.RB [ \-y ]
+.br
 .B git workflow branch status
 .RB [ \-\-no\-fetch ]
 .br
 .B git workflow branch config
-.RB [ \-\-types | \-\-versioned\-types ]
+.RB [ \-\-types | \-\-versioned\-types | \-\-environments ]
 |
 .B help
 |
@@ -70,9 +75,10 @@ too.
 .PP
 .B start ,
 .B pre ,
-.B release
-and
+.B release ,
 .B finish
+and
+.B promote
 take
 .B \-y
 .RB ( \-\-yes ):
@@ -113,7 +119,12 @@ from the main branch. In
 topic branches start from the main branch and
 .I hotfix/vX.Y.Z
 from the latest release tag, since the main branch already has unreleased
-work. Versions are checked against existing tags. For a release or hotfix
+work. In
+.BR gitlab ,
+topic branches start from the main branch and
+.I hotfix/name
+from the last environment branch
+.RB ( production ). Versions are checked against existing tags. For a release or hotfix
 branch (any versioned type),
 .BR major ,
 .B minor
@@ -201,7 +212,10 @@ and only the tag pushed; in
 a pull request from the main branch into the dev branch follows. Tagging
 the merge works however the pull request was merged; tagging the tested
 tip (GitHub flow's hotfixes) needs a merge commit, and a squashed one is
-refused.
+refused. In
+.BR gitlab ,
+a hotfix merged into production is followed by a pull request from
+production into each branch above it (staging, then the main branch).
 .IP
 Merging locally
 .RB ( workflow.integrate=merge ),
@@ -213,7 +227,10 @@ branch, tagged
 (on the merge, or on the tested tip), merged back into the dev branch
 (git flow), and pushed with
 .B git push \-\-atomic
-together with that one tag.
+together with that one tag. In
+.BR gitlab ,
+a hotfix is merged into production, production into staging and the main
+branch, and all three pushed in that one atomic push.
 Nothing is pushed until every local step has succeeded. If a merge
 conflicts, the dev branch has diverged, or the push is rejected, finish
 restores the main and dev branches, deletes the tag it made, and returns
@@ -245,14 +262,35 @@ or
 .B d
 after the branch name) still work, with a warning, until v4.
 .TP
+.B promote \fR[\fIenvironment\fR] [\fB\-n\fR] [\fB\-y\fR]
+In flows with environment branches
+.RB ( workflow.environments ,
+set by
+.BR gitlab ):
+move an environment up to the branch before it in the chain (the main
+branch, then each environment in order), so it gets exactly what that one
+tested. With no environment, the first one that's behind.
+Merging locally
+.RB ( workflow.integrate=merge ),
+the environment is fast-forwarded to the tested commit and pushed; when
+an earlier promotion was a merge or a squash, a merge commit with exactly
+the source's tree is pushed instead. With pull requests, one is opened
+from the source into the environment, or the open one shown.
+An environment with changes its source doesn't have (a hotfix not merged
+back) is refused, since the result would be untested. A missing
+environment is created at its source.
+.B \-n
+shows what would move.
+.TP
 .B status \fR[\fB\-\-no\-fetch\fR]
 Show the flow and the latest release; the current branch, its commits of
 its own and unpushed ones, its prereleases and the commits after the last
 one, its pull request, and the command to run next; the open branches of
-each type; and what's left to do: a release or hotfix branch merged into
-the main branch but never tagged (finish wasn't run again after its pull
-request merged), a merged topic branch still around, a prerelease of the
-main branch never released. It fetches first, unless
+each type; each environment branch against the one before it; and what's
+left to do: a release or hotfix branch merged into the main branch but
+never tagged (finish wasn't run again after its pull request merged), a
+branch merged but not merged back, a merged topic branch still around, a
+prerelease of the main branch never released. It fetches first, unless
 .BR \-\-no\-fetch ,
 and asks the forge only about the current branch, and only when git
 can't see it merged.
@@ -263,7 +301,9 @@ and the branch types.
 .B \-\-types
 prints only the type names, and
 .B \-\-versioned\-types
-the ones whose branches are named by version.
+the ones whose branches are named by version, and
+.B \-\-environments
+the environment branches.
 .TP
 .B version
 Show the installed version.
@@ -282,6 +322,11 @@ git workflow branch finish           # pushes it, opens a pull request
 git workflow branch finish           # after the merge: deletes the branch
 git workflow branch pre              # on main: v1.3.0\-rc.1 (from VERSION)
 git workflow branch release          # tags rc.1's commit v1.3.0
+
+# GitLab flow (workflow.flow gitlab)
+git workflow branch promote          # main \-> staging: the commit main has
+git workflow branch promote production   # staging \-> production
+git workflow branch start hotfix fix # from production; finish merges it back
 .fi
 .SH SEE ALSO
 .BR git\-workflow (1)
