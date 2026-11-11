@@ -1,6 +1,7 @@
-.TH GIT-WORKFLOW 1 2026-11-06 git-workflow "git-workflow manual"
+.TH GIT-WORKFLOW 1 2026-11-10 git-workflow "git-workflow manual"
 .SH NAME
-git-workflow \- git flow, GitHub flow or your own, with SemVer releases and guardrails
+git-workflow \- git flow, GitHub flow, GitLab flow or your own, with SemVer
+releases and guardrails
 .SH SYNOPSIS
 .B git workflow
 .I command
@@ -42,6 +43,18 @@ everything starts from and goes back into
 and a release is a tag
 .RB ( "git workflow branch pre" " and " release ).
 Hotfixes start from the latest release.
+.PP
+In
+.BR "GitLab flow" ,
+topics go into
+.BR main ,
+and changes move down a chain of environment branches,
+.BR main " \(-> " staging " \(-> " production ,
+with
+.BR "git workflow branch promote" .
+Hotfixes start from
+.BR production
+and are merged back up the chain.
 .PP
 .B git workflow branch finish
 opens a pull request by default, and running it again once that's merged
@@ -141,10 +154,11 @@ A flow is a file of
 .B workflow.*
 settings (the format of
 .BR git\-config (1)).
-Two ship,
-.B gitflow
+Three ship,
+.BR gitflow ,
+.B github
 and
-.BR github ;
+.BR gitlab ;
 one in
 .I ~/.config/git\-workflow/flows/<name>
 is a flow too, and can define its own branch types.
@@ -157,6 +171,9 @@ branch (which then becomes the dev branch), means
 .BR gitflow ;
 anything else
 .BR github .
+.B gitlab
+is never guessed; pick it with
+.BR "workflow.flow gitlab" .
 .B git workflow branch config
 shows the flow, why, and where each setting came from.
 .PP
@@ -265,8 +282,26 @@ turns flow warnings into hard stops;
 warns and asks. Default:
 .BR false .
 .TP
+.B workflow.environments
+Environment branches downstream of the main branch, in order, separated
+by spaces. Set by the
+.B gitlab
+flow:
+.BR "staging production" .
+They're protected, branch types can start from and finish into them, and
+.B git workflow branch promote
+moves each one up to the one before it. None may be a keyword
+.RB ( main ,
+.BR dev ,
+.BR none ,
+.BR latest\-release ,
+.BR last\-environment ,
+.BR upstream ),
+the main or dev branch, or listed twice.
+.TP
 .B workflow.protected
-Extra protected branches, in addition to the main and dev branches.
+Extra protected branches, in addition to the main and dev branches and
+the environments.
 Multi-valued: use
 .BR "git config \-\-add" .
 .TP
@@ -323,17 +358,21 @@ One type has none; branches no other prefix matches belong to it.
 .TP
 .B from
 .BR main ,
-.B dev
-or
-.BR latest\-release :
+.BR dev ,
+.BR latest\-release ,
+an environment, or
+.B last\-environment
+(the last of
+.BR workflow.environments ):
 what
 .B start
 branches from.
 .TP
 .B into
-.B main
-or
-.BR dev :
+.BR main ,
+.BR dev ,
+an environment, or
+.BR last\-environment :
 what
 .B finish
 integrates into.
@@ -362,11 +401,13 @@ makes the type versioned: its branches are named
 .IR vX.Y.Z .
 .TP
 .B backMerge
-.B none
+.BR none ,
+.B dev
 or
-.BR dev :
-after integrating into the main branch, merge it into the dev branch.
-.TP
+.BR upstream :
+after integrating into the main branch, merge it into the dev branch; or,
+after integrating into an environment, merge it into each branch above it
+in the chain, nearest first (production: staging, then main)..TP
 .B single
 .B true
 allows one branch of the type open at a time.
@@ -447,9 +488,10 @@ Your flows; one named like a shipped flow replaces it.
 .TP
 .I <prefix>/share/git\-workflow/flows/
 The flows that ship:
-.B gitflow
+.BR gitflow ,
+.B github
 and
-.BR github .
+.BR gitlab .
 .TP
 .I ~/.config/git\-workflow/forges/
 Your forges,

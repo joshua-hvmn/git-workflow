@@ -64,7 +64,9 @@ a forge by name, never supply one.
 ## Flows are data
 
 Until v3, git flow was the code and "trunk mode" was a set of `TRUNK_MODE` checks spread
-through it. Every new flow would have meant more of them. Now a flow is a file of settings
+through it. Every new flow would have meant more of them. GitLab flow shows the payoff: it
+needed new values (an environment in `from` and `into`, `backMerge = upstream`) and one new
+command, `promote`, not a third set of special cases. Now a flow is a file of settings
 per branch type (where `start` branches it from, where `finish` takes it, how, where the tag
 goes, what's merged back), and `flow.sh` is one engine driven by them. A flow that needs
 something the settings can't express is a new value for a setting, not a new code path.
@@ -83,6 +85,11 @@ The point of a release process is that what ships is what you tested, so:
 - `git b release` tags the commit the newest prerelease tested, not wherever `main` has got
   to, and says how many commits it's leaving for the next release.
 - The version file must match before a tag is public, not after CI fails on it.
+- In GitLab flow the same rule applies to branches: `promote` moves an environment to exactly
+  the commit (or, after a squash, the tree) the branch before it had, and refuses one with
+  changes of its own, since what landed would be a combination nothing upstream tested. An
+  environment promoted by squash has commits its source doesn't but no changes, so it's
+  matched by tree first, then by its changes, before it counts as diverged.
 
 ## finish, two ways
 

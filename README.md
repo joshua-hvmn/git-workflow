@@ -9,7 +9,8 @@ what you tested: prerelease tags your CI builds **before anything reaches `main`
 release tag on the very commit they tested.
 
 - **A flow, as data.** git flow (`main` + `next`), GitHub flow (`main` only, releases are
-  tags), or [your own](docs/configuration.md#writing-a-flow), as a file of settings. A
+  tags), GitLab flow (`main → staging → production`, with `git b promote`), or
+  [your own](docs/configuration.md#writing-a-flow), as a file of settings. A
   repository can commit its flow in `.gitworkflow`, and every contributor's `git b` follows it.
 - **Prereleases first.** `git b pre` tags `v1.3.0-rc.1` and pushes only the tag, so your
   release workflow publishes a real prerelease from the release branch. `finish` flags commits
@@ -199,6 +200,16 @@ git b pre                       # on main: v1.4.0-rc.1, with the version from VE
 git b release                   # tags exactly what rc.1 tested as v1.4.0
 ```
 
+### GitLab flow
+
+```sh
+git config workflow.flow gitlab # main, then staging and production
+git b finish                    # topics go into main
+git b promote                   # main → staging: exactly the commit main has
+git b promote production        # staging → production, once it's tested there
+git b start hotfix fix-crash    # from production; finish merges it back into staging and main
+```
+
 Forks, GitLab, and the release workflow these feed: [docs/releasing.md](docs/releasing.md).
 
 ## Commands
@@ -213,6 +224,7 @@ Forks, GitLab, and the release workflow these feed: [docs/releasing.md](docs/rel
 | `git b release [vX.Y.Z] [-n]`                    | GitHub flow: tag the newest prerelease's commit as the release             |
 | `git b finish [branch]`                          | open a pull request, or merge per the flow; tag releases; clean up         |
 | `git b delete [branch] [-y] [-f]`                | delete locally and on the remote, if it's merged                           |
+| `git b promote [environment]`                    | GitLab flow: move an environment branch up to the one before it            |
 | `git b status`                                   | where you are, what to run next, and what's left to do                     |
 | `git b config`                                   | the flow, and every setting with where it came from                        |
 | `git c [--amend] [message]`                      | commit with the message as plain words                                     |
@@ -222,14 +234,14 @@ Forks, GitLab, and the release workflow these feed: [docs/releasing.md](docs/rel
 | `git rb-pull [branch]`                           | switch to a branch and bring it up to date                                 |
 | `git sq [base]`                                  | squash the branch's own commits, without moving it                         |
 
-`start`, `pre`, `release` and `finish` take `-y` to answer their questions with yes; flow
+`start`, `pre`, `release`, `finish` and `promote` take `-y` to answer their questions with yes; flow
 warnings still ask. `git b` with options is `git branch`, and any other word is an error, so
 `git b finsh` doesn't create a branch named `finsh`.
 
 ## Configuration
 
 Nothing to set up: the flow is guessed (a `next` or `develop` branch means git flow, anything
-else GitHub flow), and `git b config` says what it guessed and why. Every setting is a
+else GitHub flow; GitLab flow you pick), and `git b config` says what it guessed and why. Every setting is a
 `workflow.*` git config key, or a line in a committed `.gitworkflow`:
 
 ```sh
@@ -274,7 +286,7 @@ make PREFIX=/usr DESTDIR="$pkgdir" install  # stage the install for the package
 | `/usr/bin/git-workflow`                               | the program                                                 |
 | `/usr/share/git-workflow/`                            | sourced libraries and `VERSION`                             |
 | `/usr/share/git-workflow/commands/`                   | one file per command, sourced by the program                |
-| `/usr/share/git-workflow/flows/`                      | the flows (`gitflow`, `github`)                             |
+| `/usr/share/git-workflow/flows/`                      | the flows (`gitflow`, `github`, `gitlab`)                   |
 | `/usr/share/git-workflow/forges/`                     | what opens pull requests (`github.sh`, `gitlab.sh`)         |
 | `/usr/share/git-workflow/aliases/`                    | the default alias sets                                      |
 | `/usr/share/man/man1/git-workflow*.1`                 | man pages (`git workflow help <command>` opens a command's) |
@@ -313,7 +325,8 @@ and copied into each test, so a test pays one `cp` for it instead of an aliases 
 about fifteen git processes. `tests/regressions.bats` has one test
 per fixed bug, grouped by release; `tests/flows.bats` covers the full flows, guardrails and `-y`;
 `tests/github-flow.bats` pull requests, releasing from `main` and forks (with a stand-in for
-`gh`, and a remote whose `main` refuses pushes); `tests/forges.bats` GitLab (a stand-in for
+`gh`, and a remote whose `main` refuses pushes); `tests/gitlab-flow.bats` environment branches,
+`promote` and hotfixes merged back up the chain; `tests/forges.bats` GitLab (a stand-in for
 `glab`), your own forges and release-run links; `tests/versions.bats` tag prefixes, version
 files and `start release minor`; `tests/status.bats` `git b status`;
 `tests/flow-config.bats` flows, settings layers and `.gitworkflow`; `tests/completion.bats`

@@ -6,7 +6,7 @@ repository's `.gitworkflow`, flows and forges of your own, versions, and the gua
 
 ## Flows
 
-A flow decides where each kind of branch starts and where `finish` takes it. Two ship:
+A flow decides where each kind of branch starts and where `finish` takes it. Three ship:
 
 - **`gitflow`**: `main` holds releases and `next` collects finished work. Topics go into
   `next`; `release/vX.Y.Z` branches go from `next` into `main`, tagged on the merge, and `main`
@@ -14,10 +14,50 @@ A flow decides where each kind of branch starts and where `finish` takes it. Two
 - **`github`**: everything starts from `main` and goes back into it. A release is a tag:
   [`pre` and `release` on `main`](releasing.md#releasing-from-main). `hotfix/vX.Y.Z` branches start from the
   latest release (since `main` already has unreleased work) and are tagged on their tested tip.
+- **`gitlab`**: GitLab flow with environment branches. Topics go into `main`, and changes move
+  down a chain of [environment branches](#environment-branches-and-promote),
+  `main → staging → production`, with `git b promote`. `hotfix/<name>` branches start from
+  `production`, go into it, and are merged back into `staging` and `main`.
 
 Unless you pick one with `workflow.flow`, it's guessed: a `next` branch (or `develop`, which
-then becomes the dev branch) means `gitflow`, anything else `github`. `git b config` shows the
-flow, why, and where every setting came from.
+then becomes the dev branch) means `gitflow`, anything else `github`. `gitlab` is never guessed,
+so a repository that happens to have a `production` branch keeps its flow: pick it with
+`git config workflow.flow gitlab`, or in a `.gitworkflow`. `git b config` shows the flow, why,
+and where every setting came from.
+
+## Environment branches and `promote`
+
+`workflow.environments` lists long-lived branches downstream of `main`, in order: the `gitlab`
+flow's are `staging production`. They're protected like `main`, and work only moves down the
+chain. `git b promote [environment]` moves an environment up to the branch before it (with no
+name, the first one that's behind), so each one gets exactly what the one before it tested:
+
+- **Merging locally** (`integrate = merge`): it fast-forwards the environment to the tested
+  commit and pushes it. If an earlier promotion was a merge or a squash, so a fast-forward
+  isn't possible, it makes a merge commit whose tree is exactly the source's.
+- **With pull requests** (the default): it opens one from the source into the environment, or
+  shows the one that's open. Merged any way, with nothing on top, the environment gets the
+  source's tree.
+- **An environment with changes its source doesn't have** (a hotfix that wasn't merged back) is
+  refused: promoting would put a combination on it that nothing above it ever tested. Merge it
+  back first, which `finish` does for a hotfix. An environment promoted by a merge or squash
+  before has commits of its own but no changes, so it's matched by tree and doesn't count.
+- A missing environment is created at its source, `-n` shows what would move, and `-y`
+  answers the questions.
+
+```sh
+git config workflow.flow gitlab
+git b start topic fix-login     # from main
+git b finish                    # pull request into main
+git b promote                   # main → staging (the first environment that's behind)
+git b promote production        # staging → production, once staging has tested it
+git b start hotfix fix-crash    # from production
+git b finish                    # into production, then back into staging and main
+```
+
+Name your own environments with `git config workflow.environments "pre-production production"`.
+The `gitlab` flow's hotfixes use `last-environment`, so they follow whatever the last one is
+called. `git b status` shows each environment against the one before it.
 
 ## How `finish` integrates
 
@@ -45,33 +85,34 @@ To merge locally on your own repositories and nowhere else, let git pick by owne
 
 Every setting is a `workflow.*` key. These apply to the whole flow:
 
-| Key                        | Default                                | Meaning                                                                        |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
-| `workflow.flow`            | guessed (above)                        | `gitflow`, `github`, or a flow of your own                                     |
-| `workflow.mainBranch`      | the remote's default branch            | production branch; stable tags live here                                       |
-| `workflow.devBranch`       | the flow's (`next`), else `mainBranch` | integration branch                                                             |
-| `workflow.integrate`       | `pr`                                   | `pr`: finish opens a pull request. `merge`: it merges locally                  |
-| `workflow.releaseFromMain` | the flow's                             | `true`: `pre` and `release` tag `main` directly                                |
-| `workflow.remote`          | `origin`                               | where your branches go (your fork, if you use one)                             |
-| `workflow.upstream`        | `upstream` if it exists, else `remote` | where main, dev and the tags live; pull requests go here                       |
-| `workflow.forge`           | `gitlab` if the URL says so, `github`  | what opens pull requests: `github` (`gh`), `gitlab` (`glab`), [yours](#forges) |
-| `workflow.prereleaseLabel` | `rc`                                   | default label for `git b pre`                                                  |
-| `workflow.strict`          | `false`                                | `true`: flow violations abort. `false`: warn and ask                           |
-| `workflow.versionFile`     | `VERSION`                              | must match the version being tagged ([formats](#versions)). `""` disables      |
-| `workflow.tagPrefix`       | `v`                                    | what comes before `X.Y.Z` in tags and branch names ([versions](#versions))     |
-| `workflow.protected`       | —                                      | extra protected branches (multi-valued, `git config --add`)                    |
+| Key                        | Default                                     | Meaning                                                                                |
+| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `workflow.flow`            | guessed (above)                             | `gitflow`, `github`, `gitlab`, or a flow of your own                                   |
+| `workflow.mainBranch`      | the remote's default branch                 | production branch; stable tags live here                                               |
+| `workflow.devBranch`       | the flow's (`next`), else `mainBranch`      | integration branch                                                                     |
+| `workflow.integrate`       | `pr`                                        | `pr`: finish opens a pull request. `merge`: it merges locally                          |
+| `workflow.releaseFromMain` | the flow's                                  | `true`: `pre` and `release` tag `main` directly                                        |
+| `workflow.remote`          | `origin`                                    | where your branches go (your fork, if you use one)                                     |
+| `workflow.upstream`        | `upstream` if it exists, else `remote`      | where main, dev and the tags live; pull requests go here                               |
+| `workflow.forge`           | `gitlab` if the URL says so, `github`       | what opens pull requests: `github` (`gh`), `gitlab` (`glab`), [yours](#forges)         |
+| `workflow.prereleaseLabel` | `rc`                                        | default label for `git b pre`                                                          |
+| `workflow.strict`          | `false`                                     | `true`: flow violations abort. `false`: warn and ask                                   |
+| `workflow.versionFile`     | `VERSION`                                   | must match the version being tagged ([formats](#versions)). `""` disables              |
+| `workflow.tagPrefix`       | `v`                                         | what comes before `X.Y.Z` in tags and branch names ([versions](#versions))             |
+| `workflow.environments`    | the flow's (`gitlab`: `staging production`) | branches downstream of `main`, in order ([promote](#environment-branches-and-promote)) |
+| `workflow.protected`       | —                                           | extra protected branches (multi-valued, `git config --add`)                            |
 
 Each branch type is a set of `workflow.<type>.<key>` settings (`workflow.release.prefix`):
 
-| Key         | Values                          | Meaning                                                                |
-| ----------- | ------------------------------- | ---------------------------------------------------------------------- |
-| `prefix`    | e.g. `release/`                 | branch name prefix; one type has none (`topic`)                        |
-| `from`      | `main`, `dev`, `latest-release` | what `start` branches from                                             |
-| `into`      | `main`, `dev`, `none`           | what `finish` integrates into; `none` removes the type                 |
-| `integrate` | `pr`, `merge`                   | overrides `workflow.integrate` for this type                           |
-| `tag`       | `none`, `merge`, `tip`          | tag `vX.Y.Z` (from the branch name) on the merge, or on the tested tip |
-| `backMerge` | `none`, `dev`                   | after integrating into `main`, merge `main` into `dev`                 |
-| `single`    | `false`, `true`                 | one branch of this type open at a time                                 |
+| Key         | Values                                                              | Meaning                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prefix`    | e.g. `release/`                                                     | branch name prefix; one type has none (`topic`)                                                                                              |
+| `from`      | `main`, `dev`, `latest-release`, an environment, `last-environment` | what `start` branches from                                                                                                                   |
+| `into`      | `main`, `dev`, an environment, `last-environment`, `none`           | what `finish` integrates into; `none` removes the type                                                                                       |
+| `integrate` | `pr`, `merge`                                                       | overrides `workflow.integrate` for this type                                                                                                 |
+| `tag`       | `none`, `merge`, `tip`                                              | tag `vX.Y.Z` (from the branch name) on the merge, or on the tested tip                                                                       |
+| `backMerge` | `none`, `dev`, `upstream`                                           | after integrating, merge the target into `dev`, or into each branch above it in the environment chain (`production`: `staging`, then `main`) |
+| `single`    | `false`, `true`                                                     | one branch of this type open at a time                                                                                                       |
 
 They're read in layers, and a later one wins:
 
